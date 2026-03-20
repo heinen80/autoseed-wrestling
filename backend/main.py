@@ -5,7 +5,6 @@ import pandas as pd
 
 app = FastAPI()
 
-# Allow frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,13 +32,9 @@ def compute_rankings(matches):
         else:
             scores[w2] += 1
 
-    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    return ranked
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
-# ---------------------------
-# Bracket Builder
-# ---------------------------
 def build_bracket(seeds):
     wrestlers = [w[0] for w in seeds]
     bracket = []
@@ -50,16 +45,6 @@ def build_bracket(seeds):
     return bracket
 
 
-# ---------------------------
-# Scheduler
-# ---------------------------
-def schedule_matches(bracket):
-    return [{"match": i+1, "teams": b} for i, b in enumerate(bracket)]
-
-
-# ---------------------------
-# Reasoning Engine
-# ---------------------------
 def build_reasons(seeds, history):
     reasons = {}
 
@@ -72,106 +57,90 @@ def build_reasons(seeds, history):
 
         w1_wins, w1_losses = record(w1)
 
-        # 1. Undefeated
         if w1_losses == 0:
             reasons[w1].append(f"Undefeated ({w1_wins}-0)")
 
-        head_to_head_wins = []
+        head_wins = []
         better_records = 0
-        common_dominance = 0
 
         for j in range(i+1, len(seeds)):
             w2 = seeds[j][0]
+            w2_wins, _ = record(w2)
 
-            w2_wins, w2_losses = record(w2)
-
-            # Head-to-head tracking
             if w2 in history[w1]["wins"]:
-                head_to_head_wins.append(w2)
+                head_wins.append(w2)
 
-            # Record comparison
             if w1_wins > w2_wins:
                 better_records += 1
 
-            # Common opponents
-            common = set(history[w1]["wins"] + history[w1]["losses"]) & \
-                     set(history[w2]["wins"] + history[w2]["losses"])
+        if head_wins:
+            reasons[w1].append(f"Head-to-head wins over: {', '.join(head_wins[:3])}")
 
-            if len(common) > 0:
-                w1_common_wins = sum(1 for c in common if c in history[w1]["wins"])
-                w2_common_wins = sum(1 for c in common if c in history[w2]["wins"])
-
-                if w1_common_wins > w2_common_wins:
-                    common_dominance += 1
-
-        # 2. Head-to-head summary
-        if head_to_head_wins:
-            wins_str = ", ".join(head_to_head_wins[:3])
-            if len(head_to_head_wins) > 3:
-                wins_str += f" +{len(head_to_head_wins)-3} more"
-            reasons[w1].append(f"Head-to-head wins over: {wins_str}")
-
-        # 3. Record dominance
-        if better_records > 0:
+        if better_records:
             reasons[w1].append(f"Better record than {better_records} opponents")
 
-        # 4. Common opponent dominance
-        if common_dominance > 0:
-            reasons[w1].append(f"Stronger vs common opponents")
-
-        # fallback
         if not reasons[w1]:
-            reasons[w1].append("Seeded by overall performance score")
+            reasons[w1].append("Seeded by overall performance")
 
     return reasons
 
 
 # ---------------------------
-# API Endpoint
+# MAIN ENDPOINT
 # ---------------------------
 @app.post("/upload/")
 async def upload(file: UploadFile = File(...)):
     df = pd.read_csv(file.file)
-    matches = df.to_dict(orient="records")
 
-    # Clean matches + build history
-    history = {}
+    # Normalize column names
+    df.columns = [c.strip() for c in df.columns]
 
-    cleaned_matches = []
+    # Ensure weight exists
+    if "weight" not in df.columns:
+        return JSONResponse({"error": "CSV must include 'weight' column"})
 
-    for m in matches:
-        w1 = str(m["wrestlerA"]).strip()
-        w2 = str(m["wrestlerB"]).strip()
-        winner = str(m["winner"]).strip()
+    results = {}
 
-        cleaned_matches.append({
-            "wrestlerA": w1,
-            "wrestlerB": w2,
-            "winner": winner
-        })
+    # GROUP BY WEIGHT
+    for weight, group in df.groupby("weight"):
 
-        if w1 not in history:
-            history[w1] = {"wins": [], "losses": []}
-        if w2 not in history:
-            history[w2] = {"wins": [], "losses": []}
+        matches = group.to_dict(orient="records")
 
-        if winner == w1:
-            history[w1]["wins"].append(w2)
-            history[w2]["losses"].append(w1)
-        else:
-            history[w2]["wins"].append(w1)
-            history[w1]["losses"].append(w2)
+        history = {}
+        cleaned_matches = []
 
-    # Generate outputs
-    seeds = compute_rankings(cleaned_matches)
-    bracket = build_bracket(seeds)
-    schedule = schedule_matches(bracket)
-    reasons = build_reasons(seeds, history)
+        for m in matches:
+            w1 = str(m["wrestlerA"]).strip()
+            w2 = str(m["wrestlerB"]).strip()
+            winner = str(m["winner"]).strip()
 
-    return JSONResponse({
-        "seeds": [(i+1, w[0], w[1]) for i, w in enumerate(seeds)],
-        "bracket": bracket,
-        "schedule": schedule,
-        "history": history,
-        "reasons": reasons
-    })
+            cleaned_matches.append({
+                "wrestlerA": w1,
+                "wrestlerB": w2,
+                "winner": winner
+            })
+
+            if w1 not in history:
+                history[w1] = {"wins": [], "losses": []}
+            if w2 not in history:
+                history[w2] = {"wins": [], "losses": []}
+
+            if winner == w1:
+                history[w1]["wins"].append(w2)
+                history[w2]["losses"].append(w1)
+            else:
+                history[w2]["wins"].append(w1)
+                history[w1]["losses"].append(w2)
+
+        seeds = compute_rankings(cleaned_matches)
+        bracket = build_bracket(seeds)
+        reasons = build_reasons(seeds, history)
+
+        results[str(weight)] = {
+            "seeds": [(i+1, w[0], w[1]) for i, w in enumerate(seeds)],
+            "bracket": bracket,
+            "history": history,
+            "reasons": reasons
+        }
+
+    return JSONResponse(results)
