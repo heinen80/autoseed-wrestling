@@ -15,7 +15,7 @@ async function upload(){
     let formData = new FormData();
     formData.append("file", file);
 
-    let res = await fetch("https://YOUR-RENDER-URL.onrender.com/upload/", {
+    let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
         method:"POST",
         body: formData
     });
