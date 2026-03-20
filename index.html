@@ -103,13 +103,13 @@ data.seeds.forEach(s => {
     output += `<div class="card" data-name="${s[1]}">${s[0]}. ${s[1]}</div>`;
 });
 
-output += "</div>";
+output += "</output += "<div class='section'><h3>Seeds (Click a name)</h3>";
 
-    output += "<div class='section'><h3>Bracket</h3>";
-    data.bracket.forEach(b => {
-        output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
-    });
-    output += "</div>";
+data.seeds.forEach(s => {
+    output += `<div class="card clickable" data-name="${s[1]}">${s[0]}. ${s[1]}</div>`;
+});
+
+output += "</div>";
 
     output += "<div id='details'></div>";
 
@@ -139,6 +139,12 @@ function showDetails(name){
 
     document.getElementById("details").innerHTML = html;
 }
+  document.addEventListener("click", function(e) {
+    if (e.target.classList.contains("clickable")) {
+        let name = e.target.getAttribute("data-name");
+        showDetails(name);
+    }
+});
 </script>
 
 </body>
