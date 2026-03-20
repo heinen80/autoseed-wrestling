@@ -1,10 +1,11 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 
 app = FastAPI()
 
+# Enable frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,6 +36,9 @@ def compute_rankings(matches):
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
+# ---------------------------
+# Bracket Builder
+# ---------------------------
 def build_bracket(seeds):
     wrestlers = [w[0] for w in seeds]
     bracket = []
@@ -45,6 +49,9 @@ def build_bracket(seeds):
     return bracket
 
 
+# ---------------------------
+# Reasoning Engine
+# ---------------------------
 def build_reasons(seeds, history):
     reasons = {}
 
@@ -89,27 +96,41 @@ def build_reasons(seeds, history):
 # MAIN ENDPOINT
 # ---------------------------
 @app.post("/upload/")
-async def upload(file: UploadFile = File(...)):
-    df = pd.read_csv(file.file)
+async def upload(request: Request, file: UploadFile = File(None)):
 
-    # Normalize column names
-    df.columns = [c.strip() for c in df.columns]
+    # ---------------------------
+    # Handle CSV OR JSON
+    # ---------------------------
+    if file:
+        df = pd.read_csv(file.file)
+        df.columns = [c.strip() for c in df.columns]
+        matches = df.to_dict(orient="records")
+    else:
+        data = await request.json()
+        matches = data.get("matches", [])
 
+    # ---------------------------
     # Ensure weight exists
-    if "weight" not in df.columns:
-        return JSONResponse({"error": "CSV must include 'weight' column"})
+    # ---------------------------
+    for m in matches:
+        if "weight" not in m or not m["weight"]:
+            m["weight"] = "unknown"
 
     results = {}
 
+    # ---------------------------
     # GROUP BY WEIGHT
+    # ---------------------------
+    df = pd.DataFrame(matches)
+
     for weight, group in df.groupby("weight"):
 
-        matches = group.to_dict(orient="records")
+        group_matches = group.to_dict(orient="records")
 
         history = {}
         cleaned_matches = []
 
-        for m in matches:
+        for m in group_matches:
             w1 = str(m["wrestlerA"]).strip()
             w2 = str(m["wrestlerB"]).strip()
             winner = str(m["winner"]).strip()
