@@ -98,10 +98,12 @@ async function upload(){
     let output = "";
 
     output += "<div class='section'><h3>Seeds (Click a name)</h3>";
-    data.seeds.forEach(s => {
-      output += `<div class="card" onclick='showDetails("${s[1]}")'>${s[0]}. ${s[1]}</div>`;
-    });
-    output += "</div>";
+
+data.seeds.forEach(s => {
+    output += `<div class="card" data-name="${s[1]}">${s[0]}. ${s[1]}</div>`;
+});
+
+output += "</div>";
 
     output += "<div class='section'><h3>Bracket</h3>";
     data.bracket.forEach(b => {
@@ -113,7 +115,13 @@ async function upload(){
 
     document.getElementById("results").innerHTML = output;
 }
-
+setTimeout(() => {
+    document.querySelectorAll(".card[data-name]").forEach(el => {
+        el.addEventListener("click", () => {
+            showDetails(el.getAttribute("data-name"));
+        });
+    });
+}, 100);
 function showDetails(name){
     let h = globalData.history[name];
 
