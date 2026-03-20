@@ -7,19 +7,27 @@ async def upload(file: UploadFile = File(...)):
     bracket = build_bracket(seeds)
     schedule = schedule_matches(bracket)
 
-    # Build match history
+    # Build wrestler history
     history = {}
-    for m in matches:
-        for w in [m["wrestlerA"], m["wrestlerB"]]:
-            if w not in history:
-                history[w] = {"wins": [], "losses": []}
 
-        if m["winner"] == m["wrestlerA"]:
-            history[m["wrestlerA"]]["wins"].append(m["wrestlerB"])
-            history[m["wrestlerB"]]["losses"].append(m["wrestlerA"])
+    for m in matches:
+        w1 = m["wrestlerA"]
+        w2 = m["wrestlerB"]
+        winner = m["winner"]
+
+        # Initialize
+        if w1 not in history:
+            history[w1] = {"wins": [], "losses": []}
+        if w2 not in history:
+            history[w2] = {"wins": [], "losses": []}
+
+        # Assign results
+        if winner == w1:
+            history[w1]["wins"].append(w2)
+            history[w2]["losses"].append(w1)
         else:
-            history[m["wrestlerB"]]["wins"].append(m["wrestlerA"])
-            history[m["wrestlerA"]]["losses"].append(m["wrestlerB"])
+            history[w2]["wins"].append(w1)
+            history[w1]["losses"].append(w2)
 
     return JSONResponse({
         "seeds": [(i+1, w[0], round(w[1],3)) for i,w in enumerate(seeds)],
