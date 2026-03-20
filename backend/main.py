@@ -64,9 +64,7 @@ def build_reasons(seeds, history):
     reasons = {}
 
     def record(w):
-        wins = len(history[w]["wins"])
-        losses = len(history[w]["losses"])
-        return wins, losses
+        return len(history[w]["wins"]), len(history[w]["losses"])
 
     for i in range(len(seeds)):
         w1 = seeds[i][0]
@@ -74,19 +72,26 @@ def build_reasons(seeds, history):
 
         w1_wins, w1_losses = record(w1)
 
+        # 1. Undefeated
+        if w1_losses == 0:
+            reasons[w1].append(f"Undefeated ({w1_wins}-0)")
+
+        head_to_head_wins = []
+        better_records = 0
+        common_dominance = 0
+
         for j in range(i+1, len(seeds)):
             w2 = seeds[j][0]
+
             w2_wins, w2_losses = record(w2)
 
-            # Head-to-head
+            # Head-to-head tracking
             if w2 in history[w1]["wins"]:
-                reasons[w1].append(f"Beat {w2} head-to-head")
+                head_to_head_wins.append(w2)
 
-            # Better record
+            # Record comparison
             if w1_wins > w2_wins:
-                reasons[w1].append(
-                    f"Better overall record ({w1_wins}-{w1_losses} vs {w2_wins}-{w2_losses})"
-                )
+                better_records += 1
 
             # Common opponents
             common = set(history[w1]["wins"] + history[w1]["losses"]) & \
@@ -97,12 +102,26 @@ def build_reasons(seeds, history):
                 w2_common_wins = sum(1 for c in common if c in history[w2]["wins"])
 
                 if w1_common_wins > w2_common_wins:
-                    reasons[w1].append(
-                        f"Better vs common opponents ({w1_common_wins}-{len(common)-w1_common_wins})"
-                    )
+                    common_dominance += 1
 
+        # 2. Head-to-head summary
+        if head_to_head_wins:
+            wins_str = ", ".join(head_to_head_wins[:3])
+            if len(head_to_head_wins) > 3:
+                wins_str += f" +{len(head_to_head_wins)-3} more"
+            reasons[w1].append(f"Head-to-head wins over: {wins_str}")
+
+        # 3. Record dominance
+        if better_records > 0:
+            reasons[w1].append(f"Better record than {better_records} opponents")
+
+        # 4. Common opponent dominance
+        if common_dominance > 0:
+            reasons[w1].append(f"Stronger vs common opponents")
+
+        # fallback
         if not reasons[w1]:
-            reasons[w1].append("No strong differentiators — seeded by overall score")
+            reasons[w1].append("Seeded by overall performance score")
 
     return reasons
 
