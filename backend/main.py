@@ -20,9 +20,9 @@ def compute_rankings(matches):
     scores = {}
 
     for m in matches:
-        w1 = m["wrestlerA"]
-        w2 = m["wrestlerB"]
-        winner = m["winner"]
+        w1 = str(m["wrestlerA"]).strip()
+        w2 = str(m["wrestlerB"]).strip()
+        winner = str(m["winner"]).strip()
 
         scores.setdefault(w1, 0)
         scores.setdefault(w2, 0)
