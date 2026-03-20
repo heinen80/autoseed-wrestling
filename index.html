@@ -13,7 +13,7 @@
     }
 
     .container {
-      max-width: 700px;
+      max-width: 750px;
       margin: 40px auto;
       background: white;
       padding: 30px;
@@ -21,22 +21,14 @@
       box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
 
-    h1 {
-      margin-bottom: 5px;
-    }
+    h1 { margin-bottom: 5px; }
+    h2 { margin-top: 30px; border-bottom: 2px solid #eee; }
+    p { color: #555; }
 
-    h2 {
-      margin-top: 30px;
-      border-bottom: 2px solid #eee;
-      padding-bottom: 5px;
-    }
-
-    p {
-      color: #555;
-    }
-
-    input {
-      margin: 20px 0;
+    textarea {
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
     }
 
     button {
@@ -47,6 +39,7 @@
       border-radius: 6px;
       cursor: pointer;
       font-size: 16px;
+      margin-top: 10px;
     }
 
     button:hover {
@@ -88,11 +81,19 @@
 <div class="container">
 
   <h1>SeedIT Wrestling</h1>
-  <p>Upload match data to generate seeds, brackets, and explanations</p>
+  <p>Upload or paste match results to generate seeds and brackets</p>
 
-  <input type="file" id="file">
+  <!-- CSV Upload -->
+  <input type="file" id="file"><br>
+  <button onclick="upload()">Upload CSV</button>
+
+  <hr>
+
+  <!-- Paste Import -->
+  <h3>Paste Results</h3>
+  <textarea id="pasteInput" rows="8" placeholder="Example: Smith dec Adams"></textarea>
   <br>
-  <button onclick="upload()">Generate Seeds</button>
+  <button onclick="pasteImport()">Convert & Seed</button>
 
   <div id="results"></div>
   <div id="details"></div>
@@ -103,12 +104,15 @@
 
 let globalData = {};
 
+// -------------------
+// CSV Upload
+// -------------------
 async function upload(){
     try {
         let file = document.getElementById('file').files[0];
 
         if (!file) {
-            alert("Please upload a CSV file");
+            alert("Upload a CSV file");
             return;
         }
 
@@ -123,41 +127,106 @@ async function upload(){
         let data = await res.json();
         globalData = data;
 
-        let output = "";
-
-        for (let weight in data) {
-            let group = data[weight];
-
-            output += `<h2>Weight ${weight}</h2>`;
-
-            // Seeds
-            output += "<div class='section'><h3>Seeds</h3>";
-            group.seeds.forEach(s => {
-                output += `<div class="card clickable" data-name="${s[1]}" data-weight="${weight}">
-                    ${s[0]}. ${s[1]}
-                </div>`;
-            });
-            output += "</div>";
-
-            // Bracket
-            output += "<div class='section'><h3>Bracket</h3>";
-            group.bracket.forEach(b => {
-                output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
-            });
-            output += "</div>";
-        }
-
-        document.getElementById("results").innerHTML = output;
-        document.getElementById("details").innerHTML = "";
+        renderResults(data);
 
     } catch (err) {
         console.error(err);
-        alert("Error processing file");
+        alert("Upload failed");
     }
 }
 
 
-// Click handler for wrestler details
+// -------------------
+// Paste Import
+// -------------------
+async function pasteImport(){
+    let text = document.getElementById("pasteInput").value;
+
+    if (!text) {
+        alert("Paste results first");
+        return;
+    }
+
+    let lines = text.split("\n");
+    let matches = [];
+
+    lines.forEach(line => {
+        line = line.trim();
+
+        // handle different formats
+        let parts = line.split(/dec|def|pin|tf|maj/i);
+
+        if (parts.length >= 2) {
+            let w1 = parts[0].trim();
+            let w2 = parts[1].trim();
+
+            matches.push({
+                wrestlerA: w1,
+                wrestlerB: w2,
+                winner: w1,
+                weight: "unknown"
+            });
+        }
+    });
+
+    sendMatches(matches);
+}
+
+
+// -------------------
+// Send to Backend
+// -------------------
+async function sendMatches(matches){
+
+    let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matches: matches })
+    });
+
+    let data = await res.json();
+    globalData = data;
+
+    renderResults(data);
+}
+
+
+// -------------------
+// Render Results
+// -------------------
+function renderResults(data){
+    let output = "";
+
+    for (let weight in data) {
+        let group = data[weight];
+
+        output += `<h2>Weight ${weight}</h2>`;
+
+        // Seeds
+        output += "<div class='section'><h3>Seeds</h3>";
+        group.seeds.forEach(s => {
+            output += `<div class="card clickable" data-name="${s[1]}" data-weight="${weight}">
+                ${s[0]}. ${s[1]}
+            </div>`;
+        });
+        output += "</div>";
+
+        // Bracket
+        output += "<div class='section'><h3>Bracket</h3>";
+        group.bracket.forEach(b => {
+            output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
+        });
+        output += "</div>";
+    }
+
+    document.getElementById("results").innerHTML = output;
+    document.getElementById("details").innerHTML = "";
+}
+
+
+// -------------------
+// Click Handler
+// -------------------
 document.addEventListener("click", function(e) {
     if (e.target.classList.contains("clickable")) {
 
