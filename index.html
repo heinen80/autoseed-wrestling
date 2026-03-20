@@ -80,6 +80,8 @@
 </div>
 
 <script>
+let globalData = {};
+
 async function upload(){
     let file = document.getElementById('file').files[0];
     let formData = new FormData();
@@ -91,12 +93,13 @@ async function upload(){
     });
 
     let data = await res.json();
+    globalData = data;
 
     let output = "";
 
-    output += "<div class='section'><h3>Seeds</h3>";
+    output += "<div class='section'><h3>Seeds (Click a name)</h3>";
     data.seeds.forEach(s => {
-        output += `<div class="card">${s[0]}. ${s[1]}</div>`;
+        output += `<div class="card" onclick="showDetails('${s[1]}')">${s[0]}. ${s[1]}</div>`;
     });
     output += "</div>";
 
@@ -106,7 +109,27 @@ async function upload(){
     });
     output += "</div>";
 
+    output += "<div id='details'></div>";
+
     document.getElementById("results").innerHTML = output;
+}
+
+function showDetails(name){
+    let h = globalData.history[name];
+
+    let html = `<div class='section'><h3>Details: ${name}</h3>`;
+
+    html += "<strong>Wins:</strong><br>";
+    if (h.wins.length === 0) html += "None<br>";
+    h.wins.forEach(w => html += `✔ ${w}<br>`);
+
+    html += "<br><strong>Losses:</strong><br>";
+    if (h.losses.length === 0) html += "None<br>";
+    h.losses.forEach(l => html += `❌ ${l}<br>`);
+
+    html += "</div>";
+
+    document.getElementById("details").innerHTML = html;
 }
 </script>
 
