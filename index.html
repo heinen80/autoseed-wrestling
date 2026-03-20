@@ -1,13 +1,83 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <title>SeedIT Wrestling</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 60px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    p {
+      color: #555;
+    }
+
+    input {
+      margin: 20px 0;
+    }
+
+    button {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    .results {
+      text-align: left;
+      margin-top: 30px;
+    }
+
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: #f9fafb;
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+
 <body>
 
-<h1>AutoSeed Wrestling</h1>
+<div class="container">
 
-<input type="file" id="file">
-<button onclick="upload()">Generate</button>
+  <h1>SeedIT Wrestling</h1>
+  <p>Upload match data to automatically generate seeds and brackets</p>
 
-<div id="output"></div>
+  <input type="file" id="file">
+  <br>
+  <button onclick="upload()">Generate Seeds</button>
+
+  <div class="results" id="results"></div>
+
+</div>
 
 <script>
 async function upload(){
@@ -22,11 +92,21 @@ async function upload(){
 
     let data = await res.json();
 
-    document.getElementById("output").innerHTML =
-        "<h2>Seeds</h2>" +
-        data.seeds.map(s=>`${s[0]}: ${s[1]}`).join("<br>") +
-        "<h2>Bracket</h2>" +
-        data.bracket.map(b=>`${b[0]} vs ${b[1]}`).join("<br>");
+    let output = "";
+
+    output += "<div class='section'><h3>Seeds</h3>";
+    data.seeds.forEach(s => {
+        output += `<div class="card">${s[0]}. ${s[1]}</div>`;
+    });
+    output += "</div>";
+
+    output += "<div class='section'><h3>Bracket</h3>";
+    data.bracket.forEach(b => {
+        output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
+    });
+    output += "</div>";
+
+    document.getElementById("results").innerHTML = output;
 }
 </script>
 
