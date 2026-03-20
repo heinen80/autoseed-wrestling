@@ -1,1 +1,34 @@
+<!DOCTYPE html>
+<html>
+<body>
 
+<h1>AutoSeed Wrestling</h1>
+
+<input type="file" id="file">
+<button onclick="upload()">Generate</button>
+
+<div id="output"></div>
+
+<script>
+async function upload(){
+    let file = document.getElementById('file').files[0];
+    let formData = new FormData();
+    formData.append("file", file);
+
+    let res = await fetch("https://YOUR-RENDER-URL.onrender.com/upload/", {
+        method:"POST",
+        body: formData
+    });
+
+    let data = await res.json();
+
+    document.getElementById("output").innerHTML =
+        "<h2>Seeds</h2>" +
+        data.seeds.map(s=>`${s[0]}: ${s[1]}`).join("<br>") +
+        "<h2>Bracket</h2>" +
+        data.bracket.map(b=>`${b[0]} vs ${b[1]}`).join("<br>");
+}
+</script>
+
+</body>
+</html>
