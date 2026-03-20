@@ -99,7 +99,7 @@ async function upload(){
 
     output += "<div class='section'><h3>Seeds (Click a name)</h3>";
     data.seeds.forEach(s => {
-        output += `<div class="card" onclick="showDetails('${s[1]}')">${s[0]}. ${s[1]}</div>`;
+      output += `<div class="card" onclick='showDetails("${s[1]}")'>${s[0]}. ${s[1]}</div>`;
     });
     output += "</div>";
 
