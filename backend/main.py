@@ -64,9 +64,9 @@ async def upload(file: UploadFile = File(...)):
     history = {}
 
     for m in matches:
-        w1 = m["wrestlerA"]
-        w2 = m["wrestlerB"]
-        winner = m["winner"]
+        w1 = str(m["wrestlerA"]).strip()
+        w2 = str(m["wrestlerB"]).strip()
+        winner = str(m["winner"]).strip()
 
         if w1 not in history:
             history[w1] = {"wins": [], "losses": []}
