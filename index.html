@@ -142,12 +142,8 @@ async function upload(){
 
 // Show wrestler details
 function showDetails(name){
-    if (!globalData.history || !globalData.history[name]) {
-        alert("No data found for this wrestler");
-        return;
-    }
-
     let h = globalData.history[name];
+    let reasons = globalData.reasons[name] || [];
 
     let html = `<div class='section'><h3>Details: ${name}</h3>`;
 
@@ -158,6 +154,9 @@ function showDetails(name){
     html += "<br><strong>Losses:</strong><br>";
     if (h.losses.length === 0) html += "None<br>";
     h.losses.forEach(l => html += `❌ ${l}<br>`);
+
+    html += "<br><strong>Why Seeded Here:</strong><br>";
+    reasons.forEach(r => html += `⭐ ${r}<br>`);
 
     html += "</div>";
 
