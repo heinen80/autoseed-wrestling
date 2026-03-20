@@ -13,8 +13,8 @@
     }
 
     .container {
-      max-width: 600px;
-      margin: 60px auto;
+      max-width: 700px;
+      margin: 40px auto;
       background: white;
       padding: 30px;
       border-radius: 10px;
@@ -22,7 +22,13 @@
     }
 
     h1 {
-      margin-bottom: 10px;
+      margin-bottom: 5px;
+    }
+
+    h2 {
+      margin-top: 30px;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 5px;
     }
 
     p {
@@ -47,13 +53,9 @@
       background: #1d4ed8;
     }
 
-    .results {
-      text-align: left;
-      margin-top: 30px;
-    }
-
     .section {
-      margin-bottom: 20px;
+      text-align: left;
+      margin-top: 20px;
     }
 
     .card {
@@ -70,6 +72,14 @@
     .clickable:hover {
       background: #e0ecff;
     }
+
+    #details {
+      margin-top: 30px;
+      padding: 15px;
+      background: #eef2ff;
+      border-radius: 8px;
+      text-align: left;
+    }
   </style>
 </head>
 
@@ -78,13 +88,14 @@
 <div class="container">
 
   <h1>SeedIT Wrestling</h1>
-  <p>Upload match data to automatically generate seeds and brackets</p>
+  <p>Upload match data to generate seeds, brackets, and explanations</p>
 
   <input type="file" id="file">
   <br>
   <button onclick="upload()">Generate Seeds</button>
 
-  <div class="results" id="results"></div>
+  <div id="results"></div>
+  <div id="details"></div>
 
 </div>
 
@@ -97,7 +108,7 @@ async function upload(){
         let file = document.getElementById('file').files[0];
 
         if (!file) {
-            alert("Please upload a CSV file first");
+            alert("Please upload a CSV file");
             return;
         }
 
@@ -114,61 +125,62 @@ async function upload(){
 
         let output = "";
 
-        // Seeds
-        output += "<div class='section'><h3>Seeds (Click a name)</h3>";
-        data.seeds.forEach(s => {
-            output += `<div class="card clickable" data-name="${s[1]}">${s[0]}. ${s[1]}</div>`;
-        });
-        output += "</div>";
+        for (let weight in data) {
+            let group = data[weight];
 
-        // Bracket
-        output += "<div class='section'><h3>Bracket</h3>";
-        data.bracket.forEach(b => {
-            output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
-        });
-        output += "</div>";
+            output += `<h2>Weight ${weight}</h2>`;
 
-        // Details section placeholder
-        output += "<div id='details'></div>";
+            // Seeds
+            output += "<div class='section'><h3>Seeds</h3>";
+            group.seeds.forEach(s => {
+                output += `<div class="card clickable" data-name="${s[1]}" data-weight="${weight}">
+                    ${s[0]}. ${s[1]}
+                </div>`;
+            });
+            output += "</div>";
+
+            // Bracket
+            output += "<div class='section'><h3>Bracket</h3>";
+            group.bracket.forEach(b => {
+                output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
+            });
+            output += "</div>";
+        }
 
         document.getElementById("results").innerHTML = output;
+        document.getElementById("details").innerHTML = "";
 
     } catch (err) {
         console.error(err);
-        alert("Something went wrong. Make sure your CSV format is correct.");
+        alert("Error processing file");
     }
 }
 
 
-// Show wrestler details
-function showDetails(name){
-    let h = globalData.history[name];
-    let reasons = globalData.reasons[name] || [];
-
-    let html = `<div class='section'><h3>Details: ${name}</h3>`;
-
-    html += "<strong>Wins:</strong><br>";
-    if (h.wins.length === 0) html += "None<br>";
-    h.wins.forEach(w => html += `✔ ${w}<br>`);
-
-    html += "<br><strong>Losses:</strong><br>";
-    if (h.losses.length === 0) html += "None<br>";
-    h.losses.forEach(l => html += `❌ ${l}<br>`);
-
-    html += "<br><strong>Why Seeded Here:</strong><br>";
-    reasons.forEach(r => html += `⭐ ${r}<br>`);
-
-    html += "</div>";
-
-    document.getElementById("details").innerHTML = html;
-}
-
-
-// Global click handler (bulletproof)
+// Click handler for wrestler details
 document.addEventListener("click", function(e) {
     if (e.target.classList.contains("clickable")) {
+
         let name = e.target.getAttribute("data-name");
-        showDetails(name);
+        let weight = e.target.getAttribute("data-weight");
+
+        let h = globalData[weight].history[name];
+        let reasons = globalData[weight].reasons[name];
+
+        let html = `<h3>${name} (${weight})</h3>`;
+
+        html += "<strong>Wins:</strong><br>";
+        if (h.wins.length === 0) html += "None<br>";
+        h.wins.forEach(w => html += `✔ ${w}<br>`);
+
+        html += "<br><strong>Losses:</strong><br>";
+        if (h.losses.length === 0) html += "None<br>";
+        h.losses.forEach(l => html += `❌ ${l}<br>`);
+
+        html += "<br><strong>Why Seeded Here:</strong><br>";
+        reasons.forEach(r => html += `⭐ ${r}<br>`);
+
+        document.getElementById("details").innerHTML = html;
     }
 });
 
