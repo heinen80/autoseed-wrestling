@@ -2,6 +2,7 @@
 <html>
 <head>
   <title>SeedIT Wrestling</title>
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -61,6 +62,14 @@
       margin: 5px 0;
       border-radius: 5px;
     }
+
+    .clickable {
+      cursor: pointer;
+    }
+
+    .clickable:hover {
+      background: #e0ecff;
+    }
   </style>
 </head>
 
@@ -80,49 +89,64 @@
 </div>
 
 <script>
+
 let globalData = {};
 
 async function upload(){
-    let file = document.getElementById('file').files[0];
-    let formData = new FormData();
-    formData.append("file", file);
+    try {
+        let file = document.getElementById('file').files[0];
 
-    let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
-        method:"POST",
-        body: formData
-    });
+        if (!file) {
+            alert("Please upload a CSV file first");
+            return;
+        }
 
-    let data = await res.json();
-    globalData = data;
+        let formData = new FormData();
+        formData.append("file", file);
 
-    let output = "";
-
-    output += "<div class='section'><h3>Seeds (Click a name)</h3>";
-
-data.seeds.forEach(s => {
-    output += `<div class="card" data-name="${s[1]}">${s[0]}. ${s[1]}</div>`;
-});
-
-output += "</output += "<div class='section'><h3>Seeds (Click a name)</h3>";
-
-data.seeds.forEach(s => {
-    output += `<div class="card clickable" data-name="${s[1]}">${s[0]}. ${s[1]}</div>`;
-});
-
-output += "</div>";
-
-    output += "<div id='details'></div>";
-
-    document.getElementById("results").innerHTML = output;
-}
-setTimeout(() => {
-    document.querySelectorAll(".card[data-name]").forEach(el => {
-        el.addEventListener("click", () => {
-            showDetails(el.getAttribute("data-name"));
+        let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
+            method:"POST",
+            body: formData
         });
-    });
-}, 100);
+
+        let data = await res.json();
+        globalData = data;
+
+        let output = "";
+
+        // Seeds
+        output += "<div class='section'><h3>Seeds (Click a name)</h3>";
+        data.seeds.forEach(s => {
+            output += `<div class="card clickable" data-name="${s[1]}">${s[0]}. ${s[1]}</div>`;
+        });
+        output += "</div>";
+
+        // Bracket
+        output += "<div class='section'><h3>Bracket</h3>";
+        data.bracket.forEach(b => {
+            output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
+        });
+        output += "</div>";
+
+        // Details section placeholder
+        output += "<div id='details'></div>";
+
+        document.getElementById("results").innerHTML = output;
+
+    } catch (err) {
+        console.error(err);
+        alert("Something went wrong. Make sure your CSV format is correct.");
+    }
+}
+
+
+// Show wrestler details
 function showDetails(name){
+    if (!globalData.history || !globalData.history[name]) {
+        alert("No data found for this wrestler");
+        return;
+    }
+
     let h = globalData.history[name];
 
     let html = `<div class='section'><h3>Details: ${name}</h3>`;
@@ -139,12 +163,16 @@ function showDetails(name){
 
     document.getElementById("details").innerHTML = html;
 }
-  document.addEventListener("click", function(e) {
+
+
+// Global click handler (bulletproof)
+document.addEventListener("click", function(e) {
     if (e.target.classList.contains("clickable")) {
         let name = e.target.getAttribute("data-name");
         showDetails(name);
     }
 });
+
 </script>
 
 </body>
