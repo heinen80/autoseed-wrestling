@@ -2,7 +2,6 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>SeedIT Wrestling</title>
 
 <style>
@@ -10,7 +9,6 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     background: #f4f6fb;
     margin: 0;
-    padding: 0;
 }
 
 .container {
@@ -27,24 +25,18 @@ body {
 .logo {
     font-size: 26px;
     font-weight: bold;
-    color: #2c3e50;
-}
-
-.subtitle {
-    color: #666;
-    margin-top: 5px;
 }
 
 .card {
     background: white;
     padding: 15px;
-    margin: 10px 0;
+    margin: 12px 0;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
 button {
-    padding: 10px 16px;
+    padding: 10px 14px;
     border: none;
     border-radius: 8px;
     margin: 5px;
@@ -52,41 +44,24 @@ button {
     font-weight: 600;
 }
 
-.primary {
-    background: #3b82f6;
-    color: white;
-}
-
-.secondary {
-    background: #10b981;
-    color: white;
-}
-
-.clickable {
-    cursor: pointer;
-    transition: 0.2s;
-}
-
-.clickable:hover {
-    transform: scale(1.02);
-    background: #f1f5ff;
-}
+.primary { background: #3b82f6; color: white; }
+.secondary { background: #10b981; color: white; }
 
 .seed-row {
     display: flex;
     justify-content: space-between;
     padding: 10px;
     border-bottom: 1px solid #eee;
+    cursor: pointer;
 }
 
-.confidence {
+.seed-row:hover {
+    background: #f1f5ff;
+}
+
+.conf {
+    font-weight: bold;
     color: #10b981;
-    font-weight: bold;
-}
-
-.section-title {
-    font-weight: bold;
-    margin-top: 10px;
 }
 
 .details {
@@ -94,7 +69,17 @@ button {
     padding: 15px;
     border-radius: 12px;
     margin-top: 15px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.table {
+    margin-top: 10px;
+}
+
+.table-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid #eee;
 }
 </style>
 </head>
@@ -103,27 +88,23 @@ button {
 
 <div class="container">
 
-    <div class="header">
-        <!-- 🔥 REPLACE THIS WITH YOUR LOGO IMAGE -->
-        <div class="logo">SeedIT Wrestling</div>
-        <div class="subtitle">Smart, explainable tournament seeding</div>
-    </div>
+<div class="header">
+    <div class="logo">SeedIT Wrestling</div>
+</div>
 
-    <div class="card">
-        <input type="file" id="file">
-        <br><br>
-        <button class="primary" onclick="upload()">Upload CSV</button>
-    </div>
+<div class="card">
+    <input type="file" id="file"><br><br>
+    <button class="primary" onclick="upload()">Upload CSV</button>
+</div>
 
-    <div class="card">
-        <div class="section-title">Paste Match Results</div>
-        <textarea id="pasteInput" rows="4" style="width:100%;"></textarea>
-        <br>
-        <button class="primary" onclick="pasteImport()">Convert & Seed</button>
-    </div>
+<div class="card">
+    <textarea id="pasteInput" rows="4" style="width:100%;" placeholder="Smith dec Adams"></textarea>
+    <br>
+    <button class="primary" onclick="pasteImport()">Paste & Seed</button>
+</div>
 
-    <div id="results"></div>
-    <div id="details" class="details"></div>
+<div id="results"></div>
+<div id="details" class="details"></div>
 
 </div>
 
@@ -131,6 +112,7 @@ button {
 
 let globalData = {};
 
+// ---------------- Upload
 async function upload(){
     let file = document.getElementById('file').files[0];
     if (!file) return alert("Upload CSV");
@@ -148,6 +130,7 @@ async function upload(){
     renderResults(data);
 }
 
+// ---------------- Paste
 async function pasteImport(){
     let text = document.getElementById("pasteInput").value;
     if (!text) return alert("Paste data");
@@ -178,25 +161,24 @@ async function pasteImport(){
     renderResults(data);
 }
 
+// ---------------- Render
 function renderResults(data){
     let output = "";
 
     for (let weight in data){
-        let group = data[weight];
+        let g = data[weight];
 
         output += `<div class="card">`;
         output += `<h2>Weight ${weight}</h2>`;
-
         output += `<button class="secondary" onclick="showCompare('${weight}')">Compare Wrestlers</button>`;
 
-        group.seeds.forEach(s => {
-            let conf = group.confidence[s[1]] || 0;
+        g.seeds.forEach(s => {
+            let conf = g.confidence[s[1]] || 0;
 
             output += `
-                <div class="seed-row clickable"
-                    data-name="${s[1]}" data-weight="${weight}">
+                <div class="seed-row" data-name="${s[1]}" data-weight="${weight}">
                     <span>${s[0]}. ${s[1]}</span>
-                    <span class="confidence">${conf}%</span>
+                    <span class="conf">${conf}%</span>
                 </div>
             `;
         });
@@ -205,40 +187,42 @@ function renderResults(data){
     }
 
     document.getElementById("results").innerHTML = output;
-    document.getElementById("details").innerHTML = "";
 }
 
+// ---------------- Click Wrestler
 document.addEventListener("click", function(e){
-    if (e.target.closest(".clickable")){
-        let el = e.target.closest(".clickable");
+    let row = e.target.closest(".seed-row");
+    if (!row) return;
 
-        let name = el.dataset.name;
-        let weight = el.dataset.weight;
+    let name = row.dataset.name;
+    let weight = row.dataset.weight;
 
-        let h = globalData[weight].history[name];
-        let reasons = globalData[weight].reasons[name];
-        let conf = globalData[weight].confidence[name];
+    let h = globalData[weight].history[name];
+    let reasons = globalData[weight].reasons[name];
+    let conf = globalData[weight].confidence[name];
 
-        let html = `<h3>${name}</h3>`;
-        html += `<b>Confidence:</b> ${conf}%<br><br>`;
+    let html = `<h3>${name}</h3>`;
+    html += `<b>Confidence:</b> ${conf}%<br><br>`;
 
-        html += "<b>Wins</b><br>";
-        h.wins.forEach(w => html += `✔ ${w}<br>`);
+    html += "<b>Record:</b><br>";
+    html += `${h.wins.length}-${h.losses.length}<br><br>`;
 
-        html += "<br><b>Losses</b><br>";
-        if (!h.losses.length) html += "None<br>";
-        h.losses.forEach(l => html += `❌ ${l}<br>`);
+    html += "<b>Wins:</b><br>";
+    h.wins.forEach(w => html += `✔ ${w}<br>`);
 
-        html += "<br><b>Why Seeded Here</b><br>";
-        reasons.forEach(r => html += `⭐ ${r}<br>`);
+    html += "<br><b>Losses:</b><br>";
+    if (!h.losses.length) html += "None<br>";
+    h.losses.forEach(l => html += `❌ ${l}<br>`);
 
-        document.getElementById("details").innerHTML = html;
-    }
+    html += "<br><b>Why Seeded Here:</b><br>";
+    reasons.forEach(r => html += `⭐ ${r}<br>`);
+
+    document.getElementById("details").innerHTML = html;
 });
 
+// ---------------- Compare UI
 function showCompare(weight){
     let names = Object.keys(globalData[weight].history);
-
     let options = names.map(n => `<option>${n}</option>`).join("");
 
     document.getElementById("details").innerHTML = `
@@ -249,20 +233,53 @@ function showCompare(weight){
     `;
 }
 
+// ---------------- Compare Logic
 function runCompare(weight){
     let w1 = document.getElementById("w1").value;
     let w2 = document.getElementById("w2").value;
 
     let h = globalData[weight].history;
+    let common = globalData[weight].common;
 
-    let winner = h[w1].wins.length >= h[w2].wins.length ? w1 : w2;
+    let html = `<h3>${w1} vs ${w2}</h3>`;
 
-    document.getElementById("details").innerHTML = `
-        <h3>${w1} vs ${w2}</h3>
-        ${w1}: ${h[w1].wins.length} wins<br>
-        ${w2}: ${h[w2].wins.length} wins<br><br>
-        <b>Recommended:</b> ${winner}
-    `;
+    // Head-to-head
+    html += "<b>Head-to-Head:</b><br>";
+    if (h[w1].wins.includes(w2)){
+        html += `✔ ${w1} beat ${w2}<br>`;
+    } else if (h[w2].wins.includes(w1)){
+        html += `✔ ${w2} beat ${w1}<br>`;
+    } else {
+        html += "No match<br>";
+    }
+
+    // Records
+    html += "<br><b>Record:</b><br>";
+    html += `${w1}: ${h[w1].wins.length}-${h[w1].losses.length}<br>`;
+    html += `${w2}: ${h[w2].wins.length}-${h[w2].losses.length}<br>`;
+
+    // Common opponents
+    html += "<br><b>Common Opponents:</b>";
+
+    let list = common[w1][w2];
+
+    if (!list.length){
+        html += "<br>None";
+    } else {
+        html += "<div class='table'>";
+        list.forEach(c => {
+            html += `
+                <div class="table-row">
+                    <span>${c.opponent}</span>
+                    <span>${w1}(${c.w1})</span>
+                    <span>${w2}(${c.w2})</span>
+                </div>
+            `;
+        });
+        html += "</div>";
+    }
+
+    document.getElementById("details").innerHTML = html;
 }
 
 </script>
