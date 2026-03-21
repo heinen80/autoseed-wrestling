@@ -152,29 +152,17 @@ async function upload(){
     let formData = new FormData();
     formData.append("file", file);
 
-    try {
-        let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
-            method:"POST",
-            body: formData
-        });
+    let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
+        method:"POST",
+        body: formData
+    });
 
-        let text = await res.text();
+    let data = await res.json();
+    globalData = data;
 
-        // 👇 SHOW RAW RESPONSE ON SCREEN
-        document.getElementById("results").innerHTML =
-            "<pre style='text-align:left'>" + text + "</pre>";
-
-        let data = JSON.parse(text);
-
-        globalData = data;
-
-        renderResults(data);
-
-    } catch (err) {
-        document.getElementById("results").innerHTML =
-            "<b style='color:red'>Upload failed:</b><br>" + err;
-    }
+    renderResults(data);
 }
+
 // -------------------
 // Paste Import
 // -------------------
@@ -190,8 +178,6 @@ async function pasteImport(){
     let matches = [];
 
     lines.forEach(line => {
-        line = line.trim();
-
         let parts = line.split(/dec|def|pin|tf|maj/i);
 
         if (parts.length >= 2) {
@@ -227,50 +213,43 @@ function renderResults(data){
 
         output += `<h2>Weight ${weight}</h2>`;
 
-        output += "<div class='section'><h3>Seeds</h3>";
+        // Alerts
+        if (group.alerts && group.alerts.length){
+            group.alerts.forEach(a => {
+                output += `<div style="color:red;">⚠ ${a}</div>`;
+            });
+        }
+
+        // Compare Button
+        output += `<button onclick="showCompare('${weight}')">Compare Wrestlers</button>`;
+
+        // Seeds
+        output += "<div><h3>Seeds</h3>";
         group.seeds.forEach(s => {
-            output += `<div class="card clickable" data-name="${s[1]}" data-weight="${weight}">
-                ${s[0]}. ${s[1]}
+            let conf = group.confidence[s[1]] || 0;
+
+            output += `<div class="card clickable" 
+                data-name="${s[1]}" data-weight="${weight}">
+                ${s[0]}. ${s[1]} 
+                <span style="float:right;color:green;">${conf}%</span>
             </div>`;
         });
         output += "</div>";
 
-        output += "<div class='section'><h3>Bracket</h3>";
-        group.bracket.forEach(b => {
-            output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
-        });
-        output += "</div>";
+        // Bracket
+        if (group.bracket){
+            output += "<div><h3>Bracket</h3>";
+            group.bracket.forEach(b => {
+                output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
+            });
+            output += "</div>";
+        }
     }
 
     document.getElementById("results").innerHTML = output;
     document.getElementById("details").innerHTML = "";
 }
-function compareWrestlers(weight){
-    let names = Object.keys(globalData[weight].history);
 
-    let w1 = prompt("Enter first wrestler name:");
-    let w2 = prompt("Enter second wrestler name:");
-
-    if (!globalData[weight].history[w1] || !globalData[weight].history[w2]){
-        alert("Invalid names");
-        return;
-    }
-
-    let h = globalData[weight].history;
-
-    let html = `<h3>Comparison: ${w1} vs ${w2}</h3>`;
-
-    html += `<strong>${w1} wins:</strong> ${h[w1].wins.length}<br>`;
-    html += `<strong>${w2} wins:</strong> ${h[w2].wins.length}<br>`;
-
-    if (h[w1].wins.includes(w2)){
-        html += "⭐ Head-to-head: " + w1 + "<br>";
-    } else if (h[w2].wins.includes(w1)){
-        html += "⭐ Head-to-head: " + w2 + "<br>";
-    }
-
-    document.getElementById("details").innerHTML = html;
-}
 // -------------------
 // Click Details
 // -------------------
@@ -282,8 +261,11 @@ document.addEventListener("click", function(e){
 
         let h = globalData[weight].history[name];
         let reasons = globalData[weight].reasons[name];
+        let conf = globalData[weight].confidence[name];
 
         let html = `<h3>${name} (${weight})</h3>`;
+
+        html += `<strong>Confidence:</strong> ${conf}%<br><br>`;
 
         html += "<strong>Wins:</strong><br>";
         if (!h.wins.length) html += "None<br>";
@@ -301,28 +283,48 @@ document.addEventListener("click", function(e){
 });
 
 // -------------------
-// Download CSV
+// Compare UI
 // -------------------
-function downloadCSV(){
-    let rows = [["Weight","Seed","Wrestler","Score"]];
+function showCompare(weight){
+    let names = Object.keys(globalData[weight].history);
 
-    for (let weight in globalData){
-        let seeds = globalData[weight].seeds;
+    let options = names.map(n => `<option value="${n}">${n}</option>`).join("");
 
-        seeds.forEach(s => {
-            rows.push([weight, s[0], s[1], s[2]]);
-        });
+    let html = `
+        <h3>Compare Wrestlers (${weight})</h3>
+        <select id="w1">${options}</select>
+        <select id="w2">${options}</select>
+        <button onclick="runCompare('${weight}')">Compare</button>
+    `;
+
+    document.getElementById("details").innerHTML = html;
+}
+
+// -------------------
+// Run Compare
+// -------------------
+function runCompare(weight){
+    let w1 = document.getElementById("w1").value;
+    let w2 = document.getElementById("w2").value;
+
+    let h = globalData[weight].history;
+
+    let html = `<h3>${w1} vs ${w2}</h3>`;
+
+    html += `<strong>${w1} wins:</strong> ${h[w1].wins.length}<br>`;
+    html += `<strong>${w2} wins:</strong> ${h[w2].wins.length}<br>`;
+
+    if (h[w1].wins.includes(w2)){
+        html += `⭐ Head-to-head: ${w1}<br>`;
+    } else if (h[w2].wins.includes(w1)){
+        html += `⭐ Head-to-head: ${w2}<br>`;
     }
 
-    let csv = rows.map(r => r.join(",")).join("\n");
+    let winner = h[w1].wins.length >= h[w2].wins.length ? w1 : w2;
 
-    let blob = new Blob([csv], { type: "text/csv" });
-    let url = URL.createObjectURL(blob);
+    html += `<br><strong>Recommended:</strong> ${winner}`;
 
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = "seeds.csv";
-    a.click();
+    document.getElementById("details").innerHTML = html;
 }
 
 </script>
