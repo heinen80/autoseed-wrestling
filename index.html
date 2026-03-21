@@ -142,47 +142,39 @@ let globalData = {};
 // Upload CSV
 // -------------------
 async function upload(){
+    let file = document.getElementById('file').files[0];
+
+    if (!file) {
+        alert("Upload a CSV file");
+        return;
+    }
+
+    let formData = new FormData();
+    formData.append("file", file);
+
     try {
-        let file = document.getElementById('file').files[0];
-
-        if (!file) {
-            alert("Upload a CSV file");
-            return;
-        }
-
-        console.log("Uploading file...");
-
-        let formData = new FormData();
-        formData.append("file", file);
-
         let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
-            method: "POST",
+            method:"POST",
             body: formData
         });
 
-        console.log("Response received:", res);
+        let text = await res.text();
 
-        if (!res.ok) {
-            let text = await res.text();
-            console.error("Server error:", text);
-            alert("Backend error — check console");
-            return;
-        }
+        // 👇 SHOW RAW RESPONSE ON SCREEN
+        document.getElementById("results").innerHTML =
+            "<pre style='text-align:left'>" + text + "</pre>";
 
-        let data = await res.json();
-
-        console.log("Parsed data:", data);
+        let data = JSON.parse(text);
 
         globalData = data;
 
         renderResults(data);
 
     } catch (err) {
-        console.error("Upload failed:", err);
-        alert("Upload failed — check console");
+        document.getElementById("results").innerHTML =
+            "<b style='color:red'>Upload failed:</b><br>" + err;
     }
 }
-
 // -------------------
 // Paste Import
 // -------------------
