@@ -6,7 +6,7 @@ import pandas as pd
 app = FastAPI()
 
 # ---------------------------
-# CORS (allow frontend)
+# CORS
 # ---------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -89,7 +89,7 @@ def build_reasons(seeds, history):
         for j in range(i+1, len(seeds)):
             w2 = seeds[j][0]
             if w2 in history[w1]["wins"]:
-                reasons[w1].append(f"Beat {w2} head-to-head")
+                reasons[w1].append(f"Beat {w2}")
 
         if not reasons[w1]:
             reasons[w1].append("Higher win total")
@@ -98,68 +98,78 @@ def build_reasons(seeds, history):
 
 
 # ---------------------------
-# Confidence Score
+# Confidence (seed vs next)
 # ---------------------------
 def build_confidence(seeds, history):
     confidence = {}
 
-    def score(w1, w2):
-        s = 0
+    def compare(w1, w2):
+        score = 0
 
         # Head-to-head
         if w2 in history[w1]["wins"]:
-            s += 3
-        if w1 in history[w2]["wins"]:
-            s -= 3
+            score += 3
+        elif w1 in history[w2]["wins"]:
+            score -= 3
 
-        # Win %
-        w1_wins = len(history[w1]["wins"])
-        w1_losses = len(history[w1]["losses"])
-        w2_wins = len(history[w2]["wins"])
-        w2_losses = len(history[w2]["losses"])
+        # Record comparison
+        w1_w = len(history[w1]["wins"])
+        w1_l = len(history[w1]["losses"])
+        w2_w = len(history[w2]["wins"])
+        w2_l = len(history[w2]["losses"])
 
-        w1_pct = w1_wins / (w1_wins + w1_losses) if (w1_wins + w1_losses) else 0
-        w2_pct = w2_wins / (w2_wins + w2_losses) if (w2_wins + w2_losses) else 0
+        w1_pct = w1_w / (w1_w + w1_l) if (w1_w + w1_l) else 0
+        w2_pct = w2_w / (w2_w + w2_l) if (w2_w + w2_l) else 0
 
-        s += (w1_pct - w2_pct) * 2
+        if abs(w1_pct - w2_pct) > 0.15:
+            score += 1 if w1_pct > w2_pct else -1
 
         # Common opponents
         common = set(history[w1]["wins"] + history[w1]["losses"]) & \
                  set(history[w2]["wins"] + history[w2]["losses"])
 
-        if common:
+        if len(common) >= 3:
             w1_common = sum(1 for c in common if c in history[w1]["wins"])
             w2_common = sum(1 for c in common if c in history[w2]["wins"])
 
-            total = len(common)
-            s += ((w1_common - w2_common) / total) * 2
+            if abs(w1_common - w2_common) >= 2:
+                score += 1 if w1_common > w2_common else -1
 
-        return s
+        return score
 
     for i in range(len(seeds)):
         w1 = seeds[i][0]
 
-        # Last seed = no one below → lower confidence
         if i == len(seeds) - 1:
             confidence[w1] = 60.0
             continue
 
         w2 = seeds[i+1][0]
 
-        s = score(w1, w2)
+        s = compare(w1, w2)
 
-        # Convert to confidence %
-        # Big gap = high confidence
-        # Small gap = low confidence
-        conf = 50 + (s * 15)
+        if s >= 4:
+            conf = 95
+        elif s == 3:
+            conf = 88
+        elif s == 2:
+            conf = 78
+        elif s == 1:
+            conf = 65
+        elif s == 0:
+            conf = 55
+        elif s == -1:
+            conf = 45
+        else:
+            conf = 35
 
-        confidence[w1] = round(max(5, min(conf, 100)), 1)
+        confidence[w1] = conf
 
     return confidence
 
 
 # ---------------------------
-# Bracket Builder
+# Bracket
 # ---------------------------
 def build_bracket(seeds):
     wrestlers = [w[0] for w in seeds]
@@ -172,24 +182,57 @@ def build_bracket(seeds):
 
 
 # ---------------------------
-# MAIN ENDPOINT
+# NEW: Common Opponent Data
+# ---------------------------
+def build_common_opponents(history):
+    common_data = {}
+
+    wrestlers = list(history.keys())
+
+    for w1 in wrestlers:
+        common_data[w1] = {}
+
+        for w2 in wrestlers:
+            if w1 == w2:
+                continue
+
+            w1_opps = set(history[w1]["wins"] + history[w1]["losses"])
+            w2_opps = set(history[w2]["wins"] + history[w2]["losses"])
+
+            common = w1_opps & w2_opps
+
+            results = []
+
+            for opp in common:
+                w1_result = "W" if opp in history[w1]["wins"] else "L"
+                w2_result = "W" if opp in history[w2]["wins"] else "L"
+
+                results.append({
+                    "opponent": opp,
+                    "w1": w1_result,
+                    "w2": w2_result
+                })
+
+            common_data[w1][w2] = results
+
+    return common_data
+
+
+# ---------------------------
+# MAIN
 # ---------------------------
 @app.post("/upload/")
 async def upload(request: Request, file: UploadFile = File(None)):
 
     try:
-        # ---------------------------
-        # Handle CSV Upload
-        # ---------------------------
+        # CSV
         if file:
             contents = await file.read()
             from io import StringIO
             df = pd.read_csv(StringIO(contents.decode("utf-8")))
             matches = df.to_dict(orient="records")
 
-        # ---------------------------
-        # Handle JSON (paste input)
-        # ---------------------------
+        # JSON
         else:
             data = await request.json()
             matches = data.get("matches", [])
@@ -197,9 +240,7 @@ async def upload(request: Request, file: UploadFile = File(None)):
         if not matches:
             return JSONResponse({"error": "No matches found"})
 
-        # ---------------------------
-        # Ensure weight exists
-        # ---------------------------
+        # Ensure weight
         for m in matches:
             m["weight"] = m.get("weight", "unknown")
 
@@ -207,9 +248,6 @@ async def upload(request: Request, file: UploadFile = File(None)):
 
         results = {}
 
-        # ---------------------------
-        # Group by weight
-        # ---------------------------
         for weight, group in df.groupby("weight"):
 
             group_matches = group.to_dict(orient="records")
@@ -219,13 +257,15 @@ async def upload(request: Request, file: UploadFile = File(None)):
             reasons = build_reasons(seeds, history)
             confidence = build_confidence(seeds, history)
             bracket = build_bracket(seeds)
+            common = build_common_opponents(history)
 
             results[str(weight)] = {
                 "seeds": [(i+1, w[0], w[1]) for i, w in enumerate(seeds)],
                 "history": history,
                 "reasons": reasons,
                 "confidence": confidence,
-                "bracket": bracket
+                "bracket": bracket,
+                "common": common
             }
 
         return JSONResponse(results)
