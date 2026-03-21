@@ -233,7 +233,32 @@ function renderResults(data){
     document.getElementById("results").innerHTML = output;
     document.getElementById("details").innerHTML = "";
 }
+function compareWrestlers(weight){
+    let names = Object.keys(globalData[weight].history);
 
+    let w1 = prompt("Enter first wrestler name:");
+    let w2 = prompt("Enter second wrestler name:");
+
+    if (!globalData[weight].history[w1] || !globalData[weight].history[w2]){
+        alert("Invalid names");
+        return;
+    }
+
+    let h = globalData[weight].history;
+
+    let html = `<h3>Comparison: ${w1} vs ${w2}</h3>`;
+
+    html += `<strong>${w1} wins:</strong> ${h[w1].wins.length}<br>`;
+    html += `<strong>${w2} wins:</strong> ${h[w2].wins.length}<br>`;
+
+    if (h[w1].wins.includes(w2)){
+        html += "⭐ Head-to-head: " + w1 + "<br>";
+    } else if (h[w2].wins.includes(w1)){
+        html += "⭐ Head-to-head: " + w2 + "<br>";
+    }
+
+    document.getElementById("details").innerHTML = html;
+}
 // -------------------
 // Click Details
 // -------------------
