@@ -152,8 +152,10 @@ def compare(w1, w2, history):
 async def upload(request: Request, file: UploadFile = File(None)):
 
     if file:
-        df = pd.read_csv(file.file)
-        matches = df.to_dict(orient="records")
+    contents = await file.read()
+    from io import StringIO
+    df = pd.read_csv(StringIO(contents.decode("utf-8")))
+    matches = df.to_dict(orient="records")
     else:
         data = await request.json()
         matches = data.get("matches", [])
