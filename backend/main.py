@@ -5,6 +5,9 @@ import pandas as pd
 
 app = FastAPI()
 
+# ---------------------------
+# CORS (allow frontend)
+# ---------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,6 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------
+# Health Check
+# ---------------------------
 @app.get("/")
 def root():
     return {"status": "ok"}
@@ -74,13 +80,16 @@ def build_reasons(seeds, history):
         w1 = seeds[i][0]
         reasons[w1] = []
 
-        if len(history[w1]["losses"]) == 0:
-            reasons[w1].append("Undefeated")
+        wins = len(history[w1]["wins"])
+        losses = len(history[w1]["losses"])
+
+        if losses == 0:
+            reasons[w1].append(f"Undefeated ({wins}-0)")
 
         for j in range(i+1, len(seeds)):
             w2 = seeds[j][0]
             if w2 in history[w1]["wins"]:
-                reasons[w1].append(f"Beat {w2}")
+                reasons[w1].append(f"Beat {w2} head-to-head")
 
         if not reasons[w1]:
             reasons[w1].append("Higher win total")
@@ -89,7 +98,7 @@ def build_reasons(seeds, history):
 
 
 # ---------------------------
-# Confidence
+# Confidence Score
 # ---------------------------
 def build_confidence(seeds, history):
     confidence = {}
@@ -101,7 +110,7 @@ def build_confidence(seeds, history):
         pct = wins / (wins + losses) if (wins + losses) else 0
 
         gap = 0
-        if i < len(seeds)-1:
+        if i < len(seeds) - 1:
             gap = score - seeds[i+1][1]
 
         confidence[w] = round((pct * 70 + gap * 30), 1)
@@ -110,17 +119,37 @@ def build_confidence(seeds, history):
 
 
 # ---------------------------
-# MAIN
+# Bracket Builder
+# ---------------------------
+def build_bracket(seeds):
+    wrestlers = [w[0] for w in seeds]
+    bracket = []
+
+    while len(wrestlers) >= 2:
+        bracket.append([wrestlers.pop(0), wrestlers.pop(-1)])
+
+    return bracket
+
+
+# ---------------------------
+# MAIN ENDPOINT
 # ---------------------------
 @app.post("/upload/")
 async def upload(request: Request, file: UploadFile = File(None)):
 
     try:
+        # ---------------------------
+        # Handle CSV Upload
+        # ---------------------------
         if file:
             contents = await file.read()
             from io import StringIO
             df = pd.read_csv(StringIO(contents.decode("utf-8")))
             matches = df.to_dict(orient="records")
+
+        # ---------------------------
+        # Handle JSON (paste input)
+        # ---------------------------
         else:
             data = await request.json()
             matches = data.get("matches", [])
@@ -128,6 +157,9 @@ async def upload(request: Request, file: UploadFile = File(None)):
         if not matches:
             return JSONResponse({"error": "No matches found"})
 
+        # ---------------------------
+        # Ensure weight exists
+        # ---------------------------
         for m in matches:
             m["weight"] = m.get("weight", "unknown")
 
@@ -135,6 +167,9 @@ async def upload(request: Request, file: UploadFile = File(None)):
 
         results = {}
 
+        # ---------------------------
+        # Group by weight
+        # ---------------------------
         for weight, group in df.groupby("weight"):
 
             group_matches = group.to_dict(orient="records")
@@ -143,12 +178,14 @@ async def upload(request: Request, file: UploadFile = File(None)):
             history = build_history(group_matches)
             reasons = build_reasons(seeds, history)
             confidence = build_confidence(seeds, history)
+            bracket = build_bracket(seeds)
 
             results[str(weight)] = {
-                "seeds": [(i+1, w[0], w[1]) for i,w in enumerate(seeds)],
+                "seeds": [(i+1, w[0], w[1]) for i, w in enumerate(seeds)],
                 "history": history,
                 "reasons": reasons,
-                "confidence": confidence
+                "confidence": confidence,
+                "bracket": bracket
             }
 
         return JSONResponse(results)
