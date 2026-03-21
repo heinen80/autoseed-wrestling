@@ -1,136 +1,129 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>SeedIT Wrestling</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: linear-gradient(135deg, #eef2ff, #f8fafc);
-      margin: 0;
-      padding: 0;
-      text-align: center;
-    }
+<title>SeedIT Wrestling</title>
 
-    .container {
-      max-width: 800px;
-      margin: 40px auto;
-      background: white;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-    }
+<style>
+body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f4f6fb;
+    margin: 0;
+    padding: 0;
+}
 
-    h1 {
-      margin-bottom: 5px;
-      color: #1e3a8a;
-    }
+.container {
+    max-width: 900px;
+    margin: auto;
+    padding: 20px;
+}
 
-    h2 {
-      margin-top: 30px;
-      border-bottom: 2px solid #e5e7eb;
-      padding-bottom: 5px;
-      color: #1e3a8a;
-    }
+.header {
+    text-align: center;
+    margin-bottom: 20px;
+}
 
-    h3 {
-      margin-bottom: 5px;
-    }
+.logo {
+    font-size: 26px;
+    font-weight: bold;
+    color: #2c3e50;
+}
 
-    p {
-      color: #555;
-    }
+.subtitle {
+    color: #666;
+    margin-top: 5px;
+}
 
-    textarea {
-      width: 100%;
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #ddd;
-    }
+.card {
+    background: white;
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
 
-    input {
-      margin-top: 10px;
-    }
+button {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    margin: 5px;
+    cursor: pointer;
+    font-weight: 600;
+}
 
-    button {
-      background: #2563eb;
-      color: white;
-      border: none;
-      padding: 12px 18px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 15px;
-      margin: 8px;
-    }
+.primary {
+    background: #3b82f6;
+    color: white;
+}
 
-    button:hover {
-      background: #1d4ed8;
-    }
+.secondary {
+    background: #10b981;
+    color: white;
+}
 
-    .download-btn {
-      background: #059669;
-    }
+.clickable {
+    cursor: pointer;
+    transition: 0.2s;
+}
 
-    .download-btn:hover {
-      background: #047857;
-    }
+.clickable:hover {
+    transform: scale(1.02);
+    background: #f1f5ff;
+}
 
-    .section {
-      text-align: left;
-      margin-top: 20px;
-    }
+.seed-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+}
 
-    .card {
-      background: #f9fafb;
-      padding: 10px;
-      margin: 6px 0;
-      border-radius: 6px;
-      transition: 0.2s;
-    }
+.confidence {
+    color: #10b981;
+    font-weight: bold;
+}
 
-    .clickable {
-      cursor: pointer;
-    }
+.section-title {
+    font-weight: bold;
+    margin-top: 10px;
+}
 
-    .clickable:hover {
-      background: #dbeafe;
-      transform: translateX(3px);
-    }
-
-    #details {
-      margin-top: 30px;
-      padding: 20px;
-      background: #eef2ff;
-      border-radius: 10px;
-      text-align: left;
-    }
-  </style>
+.details {
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+</style>
 </head>
 
 <body>
 
 <div class="container">
 
-  <h1>SeedIT Wrestling</h1>
-  <p>Generate fair, explainable tournament seeds instantly</p>
+    <div class="header">
+        <!-- 🔥 REPLACE THIS WITH YOUR LOGO IMAGE -->
+        <div class="logo">SeedIT Wrestling</div>
+        <div class="subtitle">Smart, explainable tournament seeding</div>
+    </div>
 
-  <!-- Upload -->
-  <input type="file" id="file"><br>
-  <button onclick="upload()">Upload CSV</button>
+    <div class="card">
+        <input type="file" id="file">
+        <br><br>
+        <button class="primary" onclick="upload()">Upload CSV</button>
+    </div>
 
-  <hr>
+    <div class="card">
+        <div class="section-title">Paste Match Results</div>
+        <textarea id="pasteInput" rows="4" style="width:100%;"></textarea>
+        <br>
+        <button class="primary" onclick="pasteImport()">Convert & Seed</button>
+    </div>
 
-  <!-- Paste -->
-  <h3>Paste Match Results</h3>
-  <textarea id="pasteInput" rows="7" placeholder="Smith dec Adams"></textarea><br>
-  <button onclick="pasteImport()">Convert & Seed</button>
-
-  <!-- Download -->
-  <button class="download-btn" onclick="downloadCSV()">Download Seeds</button>
-
-  <div id="results"></div>
-  <div id="details"></div>
+    <div id="results"></div>
+    <div id="details" class="details"></div>
 
 </div>
 
@@ -138,16 +131,9 @@
 
 let globalData = {};
 
-// -------------------
-// Upload CSV
-// -------------------
 async function upload(){
     let file = document.getElementById('file').files[0];
-
-    if (!file) {
-        alert("Upload a CSV file");
-        return;
-    }
+    if (!file) return alert("Upload CSV");
 
     let formData = new FormData();
     formData.append("file", file);
@@ -159,28 +145,19 @@ async function upload(){
 
     let data = await res.json();
     globalData = data;
-
     renderResults(data);
 }
 
-// -------------------
-// Paste Import
-// -------------------
 async function pasteImport(){
     let text = document.getElementById("pasteInput").value;
-
-    if (!text) {
-        alert("Paste results first");
-        return;
-    }
+    if (!text) return alert("Paste data");
 
     let lines = text.split("\n");
     let matches = [];
 
     lines.forEach(line => {
         let parts = line.split(/dec|def|pin|tf|maj/i);
-
-        if (parts.length >= 2) {
+        if (parts.length >= 2){
             matches.push({
                 wrestlerA: parts[0].trim(),
                 wrestlerB: parts[1].trim(),
@@ -191,140 +168,101 @@ async function pasteImport(){
     });
 
     let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method:"POST",
+        headers: { "Content-Type":"application/json" },
         body: JSON.stringify({ matches })
     });
 
     let data = await res.json();
     globalData = data;
-
     renderResults(data);
 }
 
-// -------------------
-// Render Results
-// -------------------
 function renderResults(data){
     let output = "";
 
     for (let weight in data){
         let group = data[weight];
 
+        output += `<div class="card">`;
         output += `<h2>Weight ${weight}</h2>`;
 
-        // Alerts
-        if (group.alerts && group.alerts.length){
-            group.alerts.forEach(a => {
-                output += `<div style="color:red;">⚠ ${a}</div>`;
-            });
-        }
+        output += `<button class="secondary" onclick="showCompare('${weight}')">Compare Wrestlers</button>`;
 
-        // Compare Button
-        output += `<button onclick="showCompare('${weight}')">Compare Wrestlers</button>`;
-
-        // Seeds
-        output += "<div><h3>Seeds</h3>";
         group.seeds.forEach(s => {
             let conf = group.confidence[s[1]] || 0;
 
-            output += `<div class="card clickable" 
-                data-name="${s[1]}" data-weight="${weight}">
-                ${s[0]}. ${s[1]} 
-                <span style="float:right;color:green;">${conf}%</span>
-            </div>`;
+            output += `
+                <div class="seed-row clickable"
+                    data-name="${s[1]}" data-weight="${weight}">
+                    <span>${s[0]}. ${s[1]}</span>
+                    <span class="confidence">${conf}%</span>
+                </div>
+            `;
         });
-        output += "</div>";
 
-        // Bracket
-        if (group.bracket){
-            output += "<div><h3>Bracket</h3>";
-            group.bracket.forEach(b => {
-                output += `<div class="card">${b[0]} vs ${b[1]}</div>`;
-            });
-            output += "</div>";
-        }
+        output += "</div>";
     }
 
     document.getElementById("results").innerHTML = output;
     document.getElementById("details").innerHTML = "";
 }
 
-// -------------------
-// Click Details
-// -------------------
 document.addEventListener("click", function(e){
-    if (e.target.classList.contains("clickable")){
+    if (e.target.closest(".clickable")){
+        let el = e.target.closest(".clickable");
 
-        let name = e.target.dataset.name;
-        let weight = e.target.dataset.weight;
+        let name = el.dataset.name;
+        let weight = el.dataset.weight;
 
         let h = globalData[weight].history[name];
         let reasons = globalData[weight].reasons[name];
         let conf = globalData[weight].confidence[name];
 
-        let html = `<h3>${name} (${weight})</h3>`;
+        let html = `<h3>${name}</h3>`;
+        html += `<b>Confidence:</b> ${conf}%<br><br>`;
 
-        html += `<strong>Confidence:</strong> ${conf}%<br><br>`;
-
-        html += "<strong>Wins:</strong><br>";
-        if (!h.wins.length) html += "None<br>";
+        html += "<b>Wins</b><br>";
         h.wins.forEach(w => html += `✔ ${w}<br>`);
 
-        html += "<br><strong>Losses:</strong><br>";
+        html += "<br><b>Losses</b><br>";
         if (!h.losses.length) html += "None<br>";
         h.losses.forEach(l => html += `❌ ${l}<br>`);
 
-        html += "<br><strong>Why Seeded Here:</strong><br>";
+        html += "<br><b>Why Seeded Here</b><br>";
         reasons.forEach(r => html += `⭐ ${r}<br>`);
 
         document.getElementById("details").innerHTML = html;
     }
 });
 
-// -------------------
-// Compare UI
-// -------------------
 function showCompare(weight){
     let names = Object.keys(globalData[weight].history);
 
-    let options = names.map(n => `<option value="${n}">${n}</option>`).join("");
+    let options = names.map(n => `<option>${n}</option>`).join("");
 
-    let html = `
-        <h3>Compare Wrestlers (${weight})</h3>
+    document.getElementById("details").innerHTML = `
+        <h3>Compare Wrestlers</h3>
         <select id="w1">${options}</select>
         <select id="w2">${options}</select>
-        <button onclick="runCompare('${weight}')">Compare</button>
+        <button class="primary" onclick="runCompare('${weight}')">Compare</button>
     `;
-
-    document.getElementById("details").innerHTML = html;
 }
 
-// -------------------
-// Run Compare
-// -------------------
 function runCompare(weight){
     let w1 = document.getElementById("w1").value;
     let w2 = document.getElementById("w2").value;
 
     let h = globalData[weight].history;
 
-    let html = `<h3>${w1} vs ${w2}</h3>`;
-
-    html += `<strong>${w1} wins:</strong> ${h[w1].wins.length}<br>`;
-    html += `<strong>${w2} wins:</strong> ${h[w2].wins.length}<br>`;
-
-    if (h[w1].wins.includes(w2)){
-        html += `⭐ Head-to-head: ${w1}<br>`;
-    } else if (h[w2].wins.includes(w1)){
-        html += `⭐ Head-to-head: ${w2}<br>`;
-    }
-
     let winner = h[w1].wins.length >= h[w2].wins.length ? w1 : w2;
 
-    html += `<br><strong>Recommended:</strong> ${winner}`;
-
-    document.getElementById("details").innerHTML = html;
+    document.getElementById("details").innerHTML = `
+        <h3>${w1} vs ${w2}</h3>
+        ${w1}: ${h[w1].wins.length} wins<br>
+        ${w2}: ${h[w2].wins.length} wins<br><br>
+        <b>Recommended:</b> ${winner}
+    `;
 }
 
 </script>
