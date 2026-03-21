@@ -5,7 +5,6 @@ import pandas as pd
 
 app = FastAPI()
 
-# Enable frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,7 +14,7 @@ app.add_middleware(
 )
 
 # ---------------------------
-# Ranking Logic
+# Ranking
 # ---------------------------
 def compute_rankings(matches):
     scores = {}
@@ -37,131 +36,159 @@ def compute_rankings(matches):
 
 
 # ---------------------------
-# Bracket Builder
+# Build History
 # ---------------------------
-def build_bracket(seeds):
-    wrestlers = [w[0] for w in seeds]
-    bracket = []
+def build_history(matches):
+    history = {}
 
-    while len(wrestlers) >= 2:
-        bracket.append([wrestlers.pop(0), wrestlers.pop(-1)])
+    for m in matches:
+        w1 = m["wrestlerA"]
+        w2 = m["wrestlerB"]
+        winner = m["winner"]
 
-    return bracket
+        history.setdefault(w1, {"wins": [], "losses": []})
+        history.setdefault(w2, {"wins": [], "losses": []})
+
+        if winner == w1:
+            history[w1]["wins"].append(w2)
+            history[w2]["losses"].append(w1)
+        else:
+            history[w2]["wins"].append(w1)
+            history[w1]["losses"].append(w2)
+
+    return history
 
 
 # ---------------------------
-# Reasoning Engine
+# Confidence Score
+# ---------------------------
+def build_confidence(seeds, history):
+    confidence = {}
+
+    for i, (w, score) in enumerate(seeds):
+        wins = len(history[w]["wins"])
+        losses = len(history[w]["losses"])
+
+        base = wins / (wins + losses) if (wins + losses) > 0 else 0
+
+        gap = 0
+        if i < len(seeds) - 1:
+            gap = score - seeds[i+1][1]
+
+        confidence[w] = round((base * 70 + gap * 30), 1)
+
+    return confidence
+
+
+# ---------------------------
+# Reasons
 # ---------------------------
 def build_reasons(seeds, history):
     reasons = {}
-
-    def record(w):
-        return len(history[w]["wins"]), len(history[w]["losses"])
 
     for i in range(len(seeds)):
         w1 = seeds[i][0]
         reasons[w1] = []
 
-        w1_wins, w1_losses = record(w1)
+        wins = len(history[w1]["wins"])
+        losses = len(history[w1]["losses"])
 
-        if w1_losses == 0:
-            reasons[w1].append(f"Undefeated ({w1_wins}-0)")
-
-        head_wins = []
-        better_records = 0
+        if losses == 0:
+            reasons[w1].append(f"Undefeated ({wins}-0)")
 
         for j in range(i+1, len(seeds)):
             w2 = seeds[j][0]
-            w2_wins, _ = record(w2)
 
             if w2 in history[w1]["wins"]:
-                head_wins.append(w2)
-
-            if w1_wins > w2_wins:
-                better_records += 1
-
-        if head_wins:
-            reasons[w1].append(f"Head-to-head wins over: {', '.join(head_wins[:3])}")
-
-        if better_records:
-            reasons[w1].append(f"Better record than {better_records} opponents")
+                reasons[w1].append(f"Beat {w2} head-to-head")
 
         if not reasons[w1]:
-            reasons[w1].append("Seeded by overall performance")
+            reasons[w1].append("Higher overall performance score")
 
     return reasons
 
 
 # ---------------------------
-# MAIN ENDPOINT
+# Controversy Detection
+# ---------------------------
+def detect_controversy(seeds):
+    alerts = []
+
+    for i in range(len(seeds)-1):
+        if abs(seeds[i][1] - seeds[i+1][1]) <= 1:
+            alerts.append(f"Close call between #{i+1} and #{i+2}")
+
+    return alerts
+
+
+# ---------------------------
+# Compare Wrestlers
+# ---------------------------
+def compare(w1, w2, history):
+    result = {}
+
+    w1_wins = len(history[w1]["wins"])
+    w2_wins = len(history[w2]["wins"])
+
+    result["w1_record"] = w1_wins
+    result["w2_record"] = w2_wins
+
+    result["head_to_head"] = w2 in history[w1]["wins"]
+
+    common = set(history[w1]["wins"] + history[w1]["losses"]) & \
+             set(history[w2]["wins"] + history[w2]["losses"])
+
+    result["common"] = list(common)
+
+    result["recommended"] = w1 if w1_wins >= w2_wins else w2
+
+    return result
+
+
+# ---------------------------
+# MAIN
 # ---------------------------
 @app.post("/upload/")
 async def upload(request: Request, file: UploadFile = File(None)):
 
-    # ---------------------------
-    # Handle CSV OR JSON
-    # ---------------------------
     if file:
         df = pd.read_csv(file.file)
-        df.columns = [c.strip() for c in df.columns]
         matches = df.to_dict(orient="records")
     else:
         data = await request.json()
         matches = data.get("matches", [])
 
-    # ---------------------------
-    # Ensure weight exists
-    # ---------------------------
     for m in matches:
-        if "weight" not in m or not m["weight"]:
-            m["weight"] = "unknown"
+        m["weight"] = m.get("weight", "unknown")
 
     results = {}
 
-    # ---------------------------
-    # GROUP BY WEIGHT
-    # ---------------------------
     df = pd.DataFrame(matches)
 
     for weight, group in df.groupby("weight"):
 
         group_matches = group.to_dict(orient="records")
 
-        history = {}
-        cleaned_matches = []
-
+        cleaned = []
         for m in group_matches:
-            w1 = str(m["wrestlerA"]).strip()
-            w2 = str(m["wrestlerB"]).strip()
-            winner = str(m["winner"]).strip()
-
-            cleaned_matches.append({
-                "wrestlerA": w1,
-                "wrestlerB": w2,
-                "winner": winner
+            cleaned.append({
+                "wrestlerA": str(m["wrestlerA"]).strip(),
+                "wrestlerB": str(m["wrestlerB"]).strip(),
+                "winner": str(m["winner"]).strip()
             })
 
-            if w1 not in history:
-                history[w1] = {"wins": [], "losses": []}
-            if w2 not in history:
-                history[w2] = {"wins": [], "losses": []}
-
-            if winner == w1:
-                history[w1]["wins"].append(w2)
-                history[w2]["losses"].append(w1)
-            else:
-                history[w2]["wins"].append(w1)
-                history[w1]["losses"].append(w2)
-
-        seeds = compute_rankings(cleaned_matches)
-        bracket = build_bracket(seeds)
+        seeds = compute_rankings(cleaned)
+        history = build_history(cleaned)
         reasons = build_reasons(seeds, history)
+        confidence = build_confidence(seeds, history)
+        alerts = detect_controversy(seeds)
 
         results[str(weight)] = {
-            "seeds": [(i+1, w[0], w[1]) for i, w in enumerate(seeds)],
-            "bracket": bracket,
+            "seeds": [(i+1, w[0], w[1]) for i,w in enumerate(seeds)],
             "history": history,
-            "reasons": reasons
+            "reasons": reasons,
+            "confidence": confidence,
+            "alerts": alerts
         }
 
     return JSONResponse(results)
