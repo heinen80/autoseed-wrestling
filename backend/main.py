@@ -103,17 +103,57 @@ def build_reasons(seeds, history):
 def build_confidence(seeds, history):
     confidence = {}
 
-    for i, (w, score) in enumerate(seeds):
-        wins = len(history[w]["wins"])
-        losses = len(history[w]["losses"])
+    def score(w1, w2):
+        s = 0
 
-        pct = wins / (wins + losses) if (wins + losses) else 0
+        # Head-to-head
+        if w2 in history[w1]["wins"]:
+            s += 3
+        if w1 in history[w2]["wins"]:
+            s -= 3
 
-        gap = 0
-        if i < len(seeds) - 1:
-            gap = score - seeds[i+1][1]
+        # Win %
+        w1_wins = len(history[w1]["wins"])
+        w1_losses = len(history[w1]["losses"])
+        w2_wins = len(history[w2]["wins"])
+        w2_losses = len(history[w2]["losses"])
 
-        confidence[w] = round((pct * 70 + gap * 30), 1)
+        w1_pct = w1_wins / (w1_wins + w1_losses) if (w1_wins + w1_losses) else 0
+        w2_pct = w2_wins / (w2_wins + w2_losses) if (w2_wins + w2_losses) else 0
+
+        s += (w1_pct - w2_pct) * 2
+
+        # Common opponents
+        common = set(history[w1]["wins"] + history[w1]["losses"]) & \
+                 set(history[w2]["wins"] + history[w2]["losses"])
+
+        if common:
+            w1_common = sum(1 for c in common if c in history[w1]["wins"])
+            w2_common = sum(1 for c in common if c in history[w2]["wins"])
+
+            total = len(common)
+            s += ((w1_common - w2_common) / total) * 2
+
+        return s
+
+    for i in range(len(seeds)):
+        w1 = seeds[i][0]
+
+        # Last seed = no one below → lower confidence
+        if i == len(seeds) - 1:
+            confidence[w1] = 60.0
+            continue
+
+        w2 = seeds[i+1][0]
+
+        s = score(w1, w2)
+
+        # Convert to confidence %
+        # Big gap = high confidence
+        # Small gap = low confidence
+        conf = 50 + (s * 15)
+
+        confidence[w1] = round(max(5, min(conf, 100)), 1)
 
     return confidence
 
