@@ -79,15 +79,24 @@ button {
 
 <div class="container">
 
-<!-- HEADER -->
-<div class="card" style="text-align:center;">
+<!-- HERO -->
+<div class="card" style="text-align:center; padding:30px 20px;">
   <img src="https://raw.githubusercontent.com/heinen80/autoseed-wrestling/main/IMG_5539.png" class="logo">
-  <div class="sub">AI Tournament Seeding</div>
+
+  <h2 style="margin-top:10px;">Run Your Seeding Meeting Before It Starts</h2>
+
+  <div class="sub">
+    Head-to-head • Common opponents • Strength of schedule • Live coach voting
+  </div>
+
+  <div style="margin-top:15px;">
+    <button onclick="document.getElementById('file').click()">Upload Tournament Data</button>
+  </div>
 </div>
 
 <!-- UPLOAD -->
 <div class="card">
-  <input type="file" id="file">
+  <input type="file" id="file" style="display:none">
   <button onclick="upload()">Upload Season Data</button>
   <button class="secondary" onclick="exportSeeds()">Export Final Seeds</button>
 </div>
@@ -102,6 +111,8 @@ button {
 <div id="details" class="card"></div>
 
 </div>
+
+</body>
 
 <script>
 
