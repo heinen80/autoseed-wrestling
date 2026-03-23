@@ -204,3 +204,38 @@ async def upload(request: Request, file: UploadFile = File(None)):
         }
 
     return JSONResponse(results)
+# ---------------------------
+# IN-MEMORY SESSION STORE
+# ---------------------------
+sessions = {}
+
+# ---------------------------
+# CREATE SESSION
+# ---------------------------
+@app.post("/session/{weight}")
+def create_session(weight: str):
+    sessions[weight] = {"votes": {}}
+    return {"status": "created"}
+
+# ---------------------------
+# CAST VOTE
+# ---------------------------
+@app.post("/vote/{weight}")
+async def vote(weight: str, request: Request):
+    data = await request.json()
+    name = data.get("name")
+
+    if weight not in sessions:
+        sessions[weight] = {"votes": {}}
+
+    sessions[weight]["votes"].setdefault(name, 0)
+    sessions[weight]["votes"][name] += 1
+
+    return sessions[weight]
+
+# ---------------------------
+# GET VOTES
+# ---------------------------
+@app.get("/votes/{weight}")
+def get_votes(weight: str):
+    return sessions.get(weight, {"votes": {}})
