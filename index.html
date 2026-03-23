@@ -5,70 +5,22 @@
 <title>SeedIT Wrestling</title>
 
 <style>
-body {
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    background: #f4f6fb;
-    margin: 0;
-}
+body { font-family: sans-serif; background:#f4f6fb; margin:0;}
+.container { max-width:900px; margin:auto; padding:20px;}
 
-.container {
-    max-width: 900px;
-    margin: auto;
-    padding: 20px;
-}
+.header { text-align:center; margin-bottom:20px;}
+.logo { font-size:28px; font-weight:bold; color:#1e3a8a;}
 
-.card {
-    background: white;
-    padding: 15px;
-    margin: 12px 0;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-}
+.card { background:white; padding:15px; margin:10px 0; border-radius:10px;}
 
-button {
-    padding: 10px 14px;
-    border: none;
-    border-radius: 8px;
-    margin: 5px;
-    cursor: pointer;
-    font-weight: 600;
-}
+.seed-row { display:flex; justify-content:space-between; padding:10px; cursor:pointer;}
+.seed-row:hover { background:#eef2ff;}
 
-.primary { background: #3b82f6; color: white; }
-.secondary { background: #10b981; color: white; }
-.export { background: #6366f1; color: white; }
+.high{color:green;} .medium{color:orange;} .low{color:red;}
 
-.seed-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px;
-    border-bottom: 1px solid #eee;
-    cursor: pointer;
-}
-
-.seed-row:hover {
-    background: #eef2ff;
-}
-
-.conf { font-weight: bold; }
-
-.high { color: #16a34a; }
-.medium { color: #ca8a04; }
-.low { color: #dc2626; }
-
-.alert {
-    background: #fee2e2;
-    padding: 8px;
-    border-radius: 6px;
-    margin-bottom: 8px;
-}
-
-.details {
-    background: white;
-    padding: 15px;
-    border-radius: 12px;
-    margin-top: 15px;
-}
+button { padding:10px; border:none; border-radius:6px; margin:5px;}
+.primary{background:#3b82f6;color:white;}
+.secondary{background:#10b981;color:white;}
 </style>
 </head>
 
@@ -76,214 +28,109 @@ button {
 
 <div class="container">
 
-<div class="card">
-    <input type="file" id="file"><br><br>
-    <button class="primary" onclick="upload()">Upload CSV</button>
+<div class="header">
+    <!-- 🔥 REPLACE WITH YOUR LOGO URL -->
+    <img src="YOUR_LOGO_URL_HERE" style="height:60px;"><br>
+    <div class="logo">SeedIT Wrestling</div>
 </div>
 
 <div class="card">
-    <textarea id="pasteInput" rows="4" style="width:100%;" placeholder="Smith dec Adams"></textarea>
-    <br>
-    <button class="primary" onclick="pasteImport()">Paste & Seed</button>
+<input type="file" id="file">
+<button class="primary" onclick="upload()">Upload CSV</button>
 </div>
 
 <div id="results"></div>
-<div id="details" class="details"></div>
+<div id="details" class="card"></div>
 
 </div>
 
 <script>
 
-let globalData = {};
-let lastCompare = null;
+let globalData={};
 
-// ---------------- Upload
 async function upload(){
-    let file = document.getElementById('file').files[0];
-    if (!file) return alert("Upload CSV");
+ let file=document.getElementById("file").files[0];
+ let fd=new FormData();
+ fd.append("file",file);
 
-    let formData = new FormData();
-    formData.append("file", file);
+ let res=await fetch("https://autoseed-backend.onrender.com/upload/",{method:"POST",body:fd});
+ let data=await res.json();
 
-    let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
-        method:"POST",
-        body: formData
-    });
-
-    let data = await res.json();
-    globalData = data;
-    renderResults(data);
+ globalData=data;
+ render(data);
 }
 
-// ---------------- Paste
-async function pasteImport(){
-    let text = document.getElementById("pasteInput").value;
-    if (!text) return alert("Paste data");
+function render(data){
+ let out="";
 
-    let matches = text.split("\n").map(line => {
-        let parts = line.split(/dec|def|pin|tf|maj/i);
-        return {
-            wrestlerA: parts[0]?.trim(),
-            wrestlerB: parts[1]?.trim(),
-            winner: parts[0]?.trim(),
-            weight: "unknown"
-        };
-    });
+ for(let w in data){
+  let g=data[w];
 
-    let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
-        method:"POST",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ matches })
-    });
+  out+=`<div class="card"><h2>${w}</h2>
+  <button class="secondary" onclick="compareUI('${w}')">Compare</button>`;
 
-    let data = await res.json();
-    globalData = data;
-    renderResults(data);
+  g.seeds.forEach((s,i)=>{
+   let c=g.confidence[s[1]]||0;
+   let cls=c>80?"high":c>60?"medium":"low";
+
+   out+=`<div class="seed-row" data-n="${s[1]}" data-w="${w}">
+   <span>${s[0]}. ${s[1]}</span>
+   <span class="${cls}">${c}% | SOS: ${g.sos[s[1]]}</span>
+   </div>`;
+  });
+
+  out+="</div>";
+ }
+
+ document.getElementById("results").innerHTML=out;
 }
 
-// ---------------- Render
-function renderResults(data){
-    let output = "";
+document.addEventListener("click",e=>{
+ let row=e.target.closest(".seed-row");
+ if(!row)return;
 
-    for (let weight in data){
-        let g = data[weight];
+ let n=row.dataset.n;
+ let w=row.dataset.w;
 
-        output += `<div class="card"><h2>Weight ${weight}</h2>`;
-        output += `<button class="secondary" onclick="showCompare('${weight}')">Compare Wrestlers</button>`;
+ let g=globalData[w];
+ let h=g.history[n];
 
-        g.seeds.forEach((s, i) => {
-            let conf = g.confidence[s[1]] || 0;
+ let html=`<h3>${n}</h3>
+ Record: ${h.wins.length}-${h.losses.length}<br>
+ SOS: ${g.sos[n]}<br>`;
 
-            let level = conf > 85 ? "high" : conf > 65 ? "medium" : "low";
-
-            // ⚠️ controversial seeds
-            if (i < g.seeds.length - 1){
-                let next = g.seeds[i+1][1];
-                let diff = Math.abs(conf - (g.confidence[next] || 0));
-
-                if (diff <= 10){
-                    output += `<div class="alert">⚠ Close: ${s[1]} vs ${next}</div>`;
-                }
-            }
-
-            output += `
-                <div class="seed-row" data-name="${s[1]}" data-weight="${weight}">
-                    <span>${s[0]}. ${s[1]}</span>
-                    <span class="conf ${level}">${conf}%</span>
-                </div>
-            `;
-        });
-
-        output += "</div>";
-    }
-
-    document.getElementById("results").innerHTML = output;
-}
-
-// ---------------- Click Wrestler
-document.addEventListener("click", function(e){
-    let row = e.target.closest(".seed-row");
-    if (!row) return;
-
-    let name = row.dataset.name;
-    let weight = row.dataset.weight;
-
-    let h = globalData[weight].history[name];
-    let reasons = globalData[weight].reasons[name];
-    let conf = globalData[weight].confidence[name];
-
-    let html = `<h3>${name}</h3>`;
-    html += `<b>Confidence:</b> ${conf}%<br><br>`;
-    html += `<b>Record:</b> ${h.wins.length}-${h.losses.length}<br><br>`;
-
-    html += "<b>Why:</b><br>";
-    reasons.forEach(r => html += `⭐ ${r}<br>`);
-
-    document.getElementById("details").innerHTML = html;
+ document.getElementById("details").innerHTML=html;
 });
 
-// ---------------- Compare UI
-function showCompare(weight){
-    let names = Object.keys(globalData[weight].history);
-    let options = names.map(n => `<option>${n}</option>`).join("");
+function compareUI(w){
+ let names=Object.keys(globalData[w].history);
+ let opts=names.map(n=>`<option>${n}</option>`).join("");
 
-    document.getElementById("details").innerHTML = `
-        <h3>Compare Wrestlers</h3>
-        <select id="w1">${options}</select>
-        <select id="w2">${options}</select>
-        <button class="primary" onclick="runCompare('${weight}')">Compare</button>
-    `;
+ document.getElementById("details").innerHTML=`
+ <select id="a">${opts}</select>
+ <select id="b">${opts}</select>
+ <button onclick="compare('${w}')">Run</button>`;
 }
 
-// ---------------- Compare Logic
-function runCompare(weight){
-    let w1 = document.getElementById("w1").value;
-    let w2 = document.getElementById("w2").value;
+function compare(w){
+ let a=document.getElementById("a").value;
+ let b=document.getElementById("b").value;
 
-    let h = globalData[weight].history;
-    let common = globalData[weight].common;
+ let g=globalData[w];
+ let h=g.history;
 
-    let advantage = 0;
+ let adv=0;
 
-    let html = `<h3>${w1} vs ${w2}</h3>`;
+ if(h[a].wins.includes(b))adv++;
+ if(h[b].wins.includes(a))adv--;
 
-    // Head-to-head
-    if (h[w1].wins.includes(w2)){
-        html += `✔ ${w1} beat ${w2}<br>`;
-        advantage++;
-    } else if (h[w2].wins.includes(w1)){
-        html += `✔ ${w2} beat ${w1}<br>`;
-        advantage--;
-    }
+ let winner=adv>0?a:adv<0?b:"Toss-up";
 
-    // Record
-    let r1 = h[w1].wins.length - h[w1].losses.length;
-    let r2 = h[w2].wins.length - h[w2].losses.length;
-
-    if (r1 > r2) advantage++;
-    else if (r2 > r1) advantage--;
-
-    html += `<br>${w1}: ${h[w1].wins.length}-${h[w1].losses.length}`;
-    html += `<br>${w2}: ${h[w2].wins.length}-${h[w2].losses.length}<br>`;
-
-    // Common
-    let list = common[w1][w2];
-
-    html += "<br><b>Common Opponents:</b><br>";
-
-    list.forEach(c => {
-        html += `${c.opponent}: ${w1}(${c.w1}) vs ${w2}(${c.w2})<br>`;
-
-        if (c.w1 === "W" && c.w2 === "L") advantage++;
-        if (c.w2 === "W" && c.w1 === "L") advantage--;
-    });
-
-    // Recommendation
-    let winner = advantage > 0 ? w1 : advantage < 0 ? w2 : "Toss-up";
-
-    html += `<br><h3>🏆 Recommended: ${winner}</h3>`;
-
-    // Save for export
-    lastCompare = {w1, w2, winner};
-
-    html += `<button class="export" onclick="exportReport()">Download Report</button>`;
-
-    document.getElementById("details").innerHTML = html;
-}
-
-// ---------------- Export
-function exportReport(){
-    if (!lastCompare) return;
-
-    let csv = `Wrestler1,Wrestler2,Recommended\n${lastCompare.w1},${lastCompare.w2},${lastCompare.winner}`;
-
-    let blob = new Blob([csv], {type:"text/csv"});
-    let url = URL.createObjectURL(blob);
-
-    let a = document.createElement("a");
-    a.href = url;
-    a.download = "comparison_report.csv";
-    a.click();
+ document.getElementById("details").innerHTML=`
+ <h3>${a} vs ${b}</h3>
+ ${a}: ${h[a].wins.length}-${h[a].losses.length}<br>
+ ${b}: ${h[b].wins.length}-${h[b].losses.length}<br><br>
+ <b>Recommended: ${winner}</b>`;
 }
 
 </script>
