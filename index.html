@@ -2,21 +2,62 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeedIT Wrestling</title>
+<title>SeedIT Elite</title>
 
 <style>
-body { font-family:sans-serif; background:#f4f6fb; }
-.container { max-width:900px; margin:auto; }
+body {
+    font-family: -apple-system, sans-serif;
+    background: linear-gradient(135deg,#0f172a,#1e293b);
+    color: white;
+    margin:0;
+}
 
-.header { text-align:center; padding:10px; }
-.logo { font-size:28px; font-weight:bold; color:#1e3a8a; }
+.container { max-width:1000px; margin:auto; padding:20px; }
 
-.card { background:white; margin:10px; padding:10px; border-radius:10px; }
+.header {
+    text-align:center;
+    font-size:28px;
+    font-weight:bold;
+    margin-bottom:20px;
+}
 
-.row { display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee; cursor:pointer; }
+.card {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(10px);
+    border-radius:12px;
+    padding:15px;
+    margin:10px 0;
+}
 
-.high{color:green;} .med{color:orange;} .low{color:red;}
+.row {
+    display:flex;
+    justify-content:space-between;
+    padding:10px;
+    border-bottom:1px solid rgba(255,255,255,0.1);
+    cursor:pointer;
+}
 
+.row:hover { background:rgba(255,255,255,0.08); }
+
+.lock { color:#22c55e; }
+.lean { color:#facc15; }
+.debate { color:#ef4444; }
+
+button {
+    padding:10px;
+    border:none;
+    border-radius:8px;
+    margin:5px;
+    background:#3b82f6;
+    color:white;
+}
+
+.details {
+    background: rgba(255,255,255,0.08);
+    padding:15px;
+    border-radius:10px;
+    margin-top:10px;
+}
 </style>
 </head>
 
@@ -24,17 +65,15 @@ body { font-family:sans-serif; background:#f4f6fb; }
 
 <div class="container">
 
-<div class="header">
-    <div class="logo">SeedIT Wrestling</div>
-</div>
+<div class="header">🏆 SeedIT Elite</div>
 
 <div class="card">
 <input type="file" id="file">
-<button onclick="upload()">Upload</button>
+<button onclick="upload()">Upload Season Data</button>
 </div>
 
 <div id="results"></div>
-<div id="details" class="card"></div>
+<div id="details" class="details"></div>
 
 </div>
 
@@ -47,10 +86,19 @@ async function upload(){
  let fd=new FormData();
  fd.append("file",f);
 
- let res=await fetch("https://autoseed-backend.onrender.com/upload/",{method:"POST",body:fd});
- data=await res.json();
+ let res=await fetch("https://autoseed-backend.onrender.com/upload/",{
+  method:"POST",
+  body:fd
+ });
 
+ data=await res.json();
  render();
+}
+
+function getTier(conf){
+ if(conf>=85) return "lock";
+ if(conf>=65) return "lean";
+ return "debate";
 }
 
 function render(){
@@ -59,16 +107,17 @@ function render(){
  for(let w in data){
   let g=data[w];
 
-  out+=`<div class="card"><h2>${w}</h2>
+  out+=`<div class="card"><h2>Weight ${w}</h2>
+  <button onclick="autoReview('${w}')">⚠ Review Seeds</button>
   <button onclick="compareUI('${w}')">Compare</button>`;
 
   g.seeds.forEach((s,i)=>{
-    let c=g.confidence[s[1]]||0;
-    let cls=c>80?"high":c>60?"med":"low";
+    let conf=g.confidence[s[1]]||0;
+    let tier=getTier(conf);
 
     out+=`<div class="row" data-w="${w}" data-n="${s[1]}">
-    ${s[0]}. ${s[1]} 
-    <span class="${cls}">${c}% | SOS ${g.sos[s[1]]}</span>
+    ${s[0]}. ${s[1]}
+    <span class="${tier}">${conf}% | SOS ${g.sos[s[1]]}</span>
     </div>`;
   });
 
@@ -78,6 +127,7 @@ function render(){
  document.getElementById("results").innerHTML=out;
 }
 
+// CLICK WRESTLER
 document.addEventListener("click",e=>{
  let r=e.target.closest(".row");
  if(!r)return;
@@ -90,23 +140,49 @@ document.addEventListener("click",e=>{
 
  let html=`<h3>${n}</h3>
  Record: ${h.wins.length}-${h.losses.length}<br>
- SOS: ${g.sos[n]}<br><br>
- Wins:<br>${h.wins.join(", ")}<br><br>
- Losses:<br>${h.losses.join(", ")}`;
+ SOS: ${g.sos[n]}<br><br>`;
+
+ html+="<b>Wins:</b><br>"+h.wins.join(", ")+"<br><br>";
+ html+="<b>Losses:</b><br>"+h.losses.join(", ");
 
  document.getElementById("details").innerHTML=html;
 });
 
+// AUTO REVIEW (🔥 ELITE FEATURE)
+function autoReview(w){
+ let g=data[w];
+
+ let html="<h3>⚠ Seeds to Review</h3>";
+
+ g.seeds.forEach((s,i)=>{
+   if(i===g.seeds.length-1) return;
+
+   let curr=s[1];
+   let next=g.seeds[i+1][1];
+
+   let diff=Math.abs((g.confidence[curr]||0)-(g.confidence[next]||0));
+
+   if(diff<8){
+     html+=`⚠ ${curr} vs ${next} → likely debate<br>`;
+   }
+ });
+
+ document.getElementById("details").innerHTML=html;
+}
+
+// COMPARE UI
 function compareUI(w){
  let names=Object.keys(data[w].history);
  let opts=names.map(n=>`<option>${n}</option>`).join("");
 
  document.getElementById("details").innerHTML=`
+ <h3>Compare Wrestlers</h3>
  <select id="a">${opts}</select>
  <select id="b">${opts}</select>
- <button onclick="runCompare('${w}')">Compare</button>`;
+ <button onclick="runCompare('${w}')">Run Comparison</button>`;
 }
 
+// COMPARE ENGINE (🔥 CORE)
 function runCompare(w){
  let a=document.getElementById("a").value;
  let b=document.getElementById("b").value;
@@ -118,9 +194,9 @@ function runCompare(w){
  let adv=0;
  let html=`<h3>${a} vs ${b}</h3>`;
 
- // H2H
- if(h[a].wins.includes(b)){ html+=`${a} beat ${b}<br>`; adv+=3; }
- else if(h[b].wins.includes(a)){ html+=`${b} beat ${a}<br>`; adv-=3; }
+ // HEAD TO HEAD
+ if(h[a].wins.includes(b)){ html+=`✔ ${a} beat ${b}<br>`; adv+=5; }
+ else if(h[b].wins.includes(a)){ html+=`✔ ${b} beat ${a}<br>`; adv-=5; }
 
  // RECORD
  let r1=h[a].wins.length-h[a].losses.length;
@@ -129,27 +205,26 @@ function runCompare(w){
  html+=`${a}: ${h[a].wins.length}-${h[a].losses.length}<br>`;
  html+=`${b}: ${h[b].wins.length}-${h[b].losses.length}<br><br>`;
 
- if(r1>r2)adv++;
- else if(r2>r1)adv--;
+ if(r1>r2) adv+=2;
+ else if(r2>r1) adv-=2;
 
  // COMMON
- html+="Common:<br>";
+ html+="<b>Common Opponents:</b><br>";
  common.forEach(c=>{
    html+=`${c.opponent}: ${a}(${c.w1}) ${b}(${c.w2})<br>`;
 
-   if(c.w1==="W" && c.w2==="L")adv++;
-   if(c.w2==="W" && c.w1==="L")adv--;
+   if(c.w1==="W" && c.w2==="L") adv+=1;
+   if(c.w2==="W" && c.w1==="L") adv-=1;
  });
 
  // SOS
- let sdiff=g.sos[a]-g.sos[b];
- if(sdiff>0)adv+=1;
- if(sdiff<0)adv-=1;
+ let sosDiff=g.sos[a]-g.sos[b];
+ adv+=sosDiff*3;
 
- // FINAL
- let winner=adv>0?a:adv<0?b:"Too close to call";
+ // FINAL DECISION
+ let winner=adv>1?a:adv<-1?b:"Too close to call";
 
- html+=`<br><b>Recommended: ${winner}</b>`;
+ html+=`<br><h2>🏆 Recommended: ${winner}</h2>`;
 
  document.getElementById("details").innerHTML=html;
 }
