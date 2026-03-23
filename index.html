@@ -5,22 +5,18 @@
 <title>SeedIT Wrestling</title>
 
 <style>
-body { font-family: sans-serif; background:#f4f6fb; margin:0;}
-.container { max-width:900px; margin:auto; padding:20px;}
+body { font-family:sans-serif; background:#f4f6fb; }
+.container { max-width:900px; margin:auto; }
 
-.header { text-align:center; margin-bottom:20px;}
-.logo { font-size:28px; font-weight:bold; color:#1e3a8a;}
+.header { text-align:center; padding:10px; }
+.logo { font-size:28px; font-weight:bold; color:#1e3a8a; }
 
-.card { background:white; padding:15px; margin:10px 0; border-radius:10px;}
+.card { background:white; margin:10px; padding:10px; border-radius:10px; }
 
-.seed-row { display:flex; justify-content:space-between; padding:10px; cursor:pointer;}
-.seed-row:hover { background:#eef2ff;}
+.row { display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee; cursor:pointer; }
 
-.high{color:green;} .medium{color:orange;} .low{color:red;}
+.high{color:green;} .med{color:orange;} .low{color:red;}
 
-button { padding:10px; border:none; border-radius:6px; margin:5px;}
-.primary{background:#3b82f6;color:white;}
-.secondary{background:#10b981;color:white;}
 </style>
 </head>
 
@@ -29,14 +25,12 @@ button { padding:10px; border:none; border-radius:6px; margin:5px;}
 <div class="container">
 
 <div class="header">
-    <!-- 🔥 REPLACE WITH YOUR LOGO URL -->
-    <img src="YOUR_LOGO_URL_HERE" style="height:60px;"><br>
     <div class="logo">SeedIT Wrestling</div>
 </div>
 
 <div class="card">
 <input type="file" id="file">
-<button class="primary" onclick="upload()">Upload CSV</button>
+<button onclick="upload()">Upload</button>
 </div>
 
 <div id="results"></div>
@@ -46,37 +40,36 @@ button { padding:10px; border:none; border-radius:6px; margin:5px;}
 
 <script>
 
-let globalData={};
+let data={};
 
 async function upload(){
- let file=document.getElementById("file").files[0];
+ let f=document.getElementById("file").files[0];
  let fd=new FormData();
- fd.append("file",file);
+ fd.append("file",f);
 
  let res=await fetch("https://autoseed-backend.onrender.com/upload/",{method:"POST",body:fd});
- let data=await res.json();
+ data=await res.json();
 
- globalData=data;
- render(data);
+ render();
 }
 
-function render(data){
+function render(){
  let out="";
 
  for(let w in data){
   let g=data[w];
 
   out+=`<div class="card"><h2>${w}</h2>
-  <button class="secondary" onclick="compareUI('${w}')">Compare</button>`;
+  <button onclick="compareUI('${w}')">Compare</button>`;
 
   g.seeds.forEach((s,i)=>{
-   let c=g.confidence[s[1]]||0;
-   let cls=c>80?"high":c>60?"medium":"low";
+    let c=g.confidence[s[1]]||0;
+    let cls=c>80?"high":c>60?"med":"low";
 
-   out+=`<div class="seed-row" data-n="${s[1]}" data-w="${w}">
-   <span>${s[0]}. ${s[1]}</span>
-   <span class="${cls}">${c}% | SOS: ${g.sos[s[1]]}</span>
-   </div>`;
+    out+=`<div class="row" data-w="${w}" data-n="${s[1]}">
+    ${s[0]}. ${s[1]} 
+    <span class="${cls}">${c}% | SOS ${g.sos[s[1]]}</span>
+    </div>`;
   });
 
   out+="</div>";
@@ -86,51 +79,79 @@ function render(data){
 }
 
 document.addEventListener("click",e=>{
- let row=e.target.closest(".seed-row");
- if(!row)return;
+ let r=e.target.closest(".row");
+ if(!r)return;
 
- let n=row.dataset.n;
- let w=row.dataset.w;
+ let w=r.dataset.w;
+ let n=r.dataset.n;
 
- let g=globalData[w];
+ let g=data[w];
  let h=g.history[n];
 
  let html=`<h3>${n}</h3>
  Record: ${h.wins.length}-${h.losses.length}<br>
- SOS: ${g.sos[n]}<br>`;
+ SOS: ${g.sos[n]}<br><br>
+ Wins:<br>${h.wins.join(", ")}<br><br>
+ Losses:<br>${h.losses.join(", ")}`;
 
  document.getElementById("details").innerHTML=html;
 });
 
 function compareUI(w){
- let names=Object.keys(globalData[w].history);
+ let names=Object.keys(data[w].history);
  let opts=names.map(n=>`<option>${n}</option>`).join("");
 
  document.getElementById("details").innerHTML=`
  <select id="a">${opts}</select>
  <select id="b">${opts}</select>
- <button onclick="compare('${w}')">Run</button>`;
+ <button onclick="runCompare('${w}')">Compare</button>`;
 }
 
-function compare(w){
+function runCompare(w){
  let a=document.getElementById("a").value;
  let b=document.getElementById("b").value;
 
- let g=globalData[w];
+ let g=data[w];
  let h=g.history;
+ let common=g.common[a][b];
 
  let adv=0;
+ let html=`<h3>${a} vs ${b}</h3>`;
 
- if(h[a].wins.includes(b))adv++;
- if(h[b].wins.includes(a))adv--;
+ // H2H
+ if(h[a].wins.includes(b)){ html+=`${a} beat ${b}<br>`; adv+=3; }
+ else if(h[b].wins.includes(a)){ html+=`${b} beat ${a}<br>`; adv-=3; }
 
- let winner=adv>0?a:adv<0?b:"Toss-up";
+ // RECORD
+ let r1=h[a].wins.length-h[a].losses.length;
+ let r2=h[b].wins.length-h[b].losses.length;
 
- document.getElementById("details").innerHTML=`
- <h3>${a} vs ${b}</h3>
- ${a}: ${h[a].wins.length}-${h[a].losses.length}<br>
- ${b}: ${h[b].wins.length}-${h[b].losses.length}<br><br>
- <b>Recommended: ${winner}</b>`;
+ html+=`${a}: ${h[a].wins.length}-${h[a].losses.length}<br>`;
+ html+=`${b}: ${h[b].wins.length}-${h[b].losses.length}<br><br>`;
+
+ if(r1>r2)adv++;
+ else if(r2>r1)adv--;
+
+ // COMMON
+ html+="Common:<br>";
+ common.forEach(c=>{
+   html+=`${c.opponent}: ${a}(${c.w1}) ${b}(${c.w2})<br>`;
+
+   if(c.w1==="W" && c.w2==="L")adv++;
+   if(c.w2==="W" && c.w1==="L")adv--;
+ });
+
+ // SOS
+ let sdiff=g.sos[a]-g.sos[b];
+ if(sdiff>0)adv+=1;
+ if(sdiff<0)adv-=1;
+
+ // FINAL
+ let winner=adv>0?a:adv<0?b:"Too close to call";
+
+ html+=`<br><b>Recommended: ${winner}</b>`;
+
+ document.getElementById("details").innerHTML=html;
 }
 
 </script>
