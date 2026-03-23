@@ -2,39 +2,41 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeedIT Elite</title>
+<title>SeedIT Presentation</title>
 
 <style>
 body {
     font-family: -apple-system, sans-serif;
-    background: linear-gradient(135deg,#0f172a,#1e293b);
+    background: #020617;
     color: white;
     margin:0;
 }
 
-.container { max-width:1000px; margin:auto; padding:20px; }
+.container { max-width:1200px; margin:auto; padding:20px; }
 
 .header {
     text-align:center;
-    font-size:28px;
+    font-size:32px;
     font-weight:bold;
-    margin-bottom:20px;
+    margin-bottom:10px;
 }
+
+.sub { text-align:center; opacity:.7; margin-bottom:20px; }
 
 .card {
     background: rgba(255,255,255,0.05);
-    backdrop-filter: blur(10px);
     border-radius:12px;
     padding:15px;
-    margin:10px 0;
+    margin-bottom:15px;
 }
 
 .row {
     display:flex;
     justify-content:space-between;
-    padding:10px;
+    padding:14px;
     border-bottom:1px solid rgba(255,255,255,0.1);
     cursor:pointer;
+    font-size:18px;
 }
 
 .row:hover { background:rgba(255,255,255,0.08); }
@@ -44,20 +46,24 @@ body {
 .debate { color:#ef4444; }
 
 button {
-    padding:10px;
+    padding:10px 14px;
     border:none;
     border-radius:8px;
     margin:5px;
-    background:#3b82f6;
+    background:#2563eb;
     color:white;
+    font-weight:bold;
 }
 
-.details {
-    background: rgba(255,255,255,0.08);
+.bigDecision {
+    text-align:center;
+    font-size:26px;
+    margin-top:15px;
     padding:15px;
-    border-radius:10px;
-    margin-top:10px;
+    background:rgba(255,255,255,0.08);
+    border-radius:12px;
 }
+
 </style>
 </head>
 
@@ -65,21 +71,25 @@ button {
 
 <div class="container">
 
-<div class="header">🏆 SeedIT Elite</div>
+<div class="header">🏆 SeedIT Presentation Mode</div>
+<div class="sub">Run your seeding meeting</div>
 
 <div class="card">
 <input type="file" id="file">
-<button onclick="upload()">Upload Season Data</button>
+<button onclick="upload()">Load Season Data</button>
 </div>
 
-<div id="results"></div>
-<div id="details" class="details"></div>
+<div id="controls" class="card"></div>
+<div id="main"></div>
+<div id="details"></div>
 
 </div>
 
 <script>
 
 let data={};
+let currentWeight=null;
+let debateQueue=[];
 
 async function upload(){
  let f=document.getElementById("file").files[0];
@@ -92,139 +102,138 @@ async function upload(){
  });
 
  data=await res.json();
- render();
+
+ buildWeightSelector();
 }
 
-function getTier(conf){
- if(conf>=85) return "lock";
- if(conf>=65) return "lean";
+function buildWeightSelector(){
+ let html="<b>Select Weight:</b><br>";
+
+ for(let w in data){
+  html+=`<button onclick="showWeight('${w}')">${w}</button>`;
+ }
+
+ html+=`<br><br><button onclick="runDebateMode()">⚠ Run Debate Queue</button>`;
+
+ document.getElementById("controls").innerHTML=html;
+}
+
+function getTier(c){
+ if(c>=85) return "lock";
+ if(c>=65) return "lean";
  return "debate";
 }
 
-function render(){
- let out="";
-
- for(let w in data){
-  let g=data[w];
-
-  out+=`<div class="card"><h2>Weight ${w}</h2>
-  <button onclick="autoReview('${w}')">⚠ Review Seeds</button>
-  <button onclick="compareUI('${w}')">Compare</button>`;
-
-  g.seeds.forEach((s,i)=>{
-    let conf=g.confidence[s[1]]||0;
-    let tier=getTier(conf);
-
-    out+=`<div class="row" data-w="${w}" data-n="${s[1]}">
-    ${s[0]}. ${s[1]}
-    <span class="${tier}">${conf}% | SOS ${g.sos[s[1]]}</span>
-    </div>`;
-  });
-
-  out+="</div>";
- }
-
- document.getElementById("results").innerHTML=out;
-}
-
-// CLICK WRESTLER
-document.addEventListener("click",e=>{
- let r=e.target.closest(".row");
- if(!r)return;
-
- let w=r.dataset.w;
- let n=r.dataset.n;
-
- let g=data[w];
- let h=g.history[n];
-
- let html=`<h3>${n}</h3>
- Record: ${h.wins.length}-${h.losses.length}<br>
- SOS: ${g.sos[n]}<br><br>`;
-
- html+="<b>Wins:</b><br>"+h.wins.join(", ")+"<br><br>";
- html+="<b>Losses:</b><br>"+h.losses.join(", ");
-
- document.getElementById("details").innerHTML=html;
-});
-
-// AUTO REVIEW (🔥 ELITE FEATURE)
-function autoReview(w){
+function showWeight(w){
+ currentWeight=w;
  let g=data[w];
 
- let html="<h3>⚠ Seeds to Review</h3>";
+ let html=`<div class="card"><h2>Weight ${w}</h2>`;
 
  g.seeds.forEach((s,i)=>{
-   if(i===g.seeds.length-1) return;
+  let conf=g.confidence[s[1]]||0;
+  let tier=getTier(conf);
 
-   let curr=s[1];
-   let next=g.seeds[i+1][1];
-
-   let diff=Math.abs((g.confidence[curr]||0)-(g.confidence[next]||0));
-
-   if(diff<8){
-     html+=`⚠ ${curr} vs ${next} → likely debate<br>`;
-   }
+  html+=`<div class="row" onclick="comparePair(${i})">
+  ${s[0]}. ${s[1]}
+  <span class="${tier}">${conf}% | SOS ${g.sos[s[1]]}</span>
+  </div>`;
  });
 
- document.getElementById("details").innerHTML=html;
+ html+="</div>";
+
+ document.getElementById("main").innerHTML=html;
+
+ buildDebateQueue(w);
 }
 
-// COMPARE UI
-function compareUI(w){
- let names=Object.keys(data[w].history);
- let opts=names.map(n=>`<option>${n}</option>`).join("");
-
- document.getElementById("details").innerHTML=`
- <h3>Compare Wrestlers</h3>
- <select id="a">${opts}</select>
- <select id="b">${opts}</select>
- <button onclick="runCompare('${w}')">Run Comparison</button>`;
-}
-
-// COMPARE ENGINE (🔥 CORE)
-function runCompare(w){
- let a=document.getElementById("a").value;
- let b=document.getElementById("b").value;
-
+function buildDebateQueue(w){
  let g=data[w];
+ debateQueue=[];
+
+ g.seeds.forEach((s,i)=>{
+  if(i===g.seeds.length-1) return;
+
+  let a=s[1];
+  let b=g.seeds[i+1][1];
+
+  let diff=Math.abs(g.confidence[a]-g.confidence[b]);
+
+  if(diff<8){
+    debateQueue.push([a,b]);
+  }
+ });
+}
+
+function runDebateMode(){
+ if(!currentWeight) return;
+
+ if(!debateQueue.length){
+  document.getElementById("details").innerHTML="<b>No major debates</b>";
+  return;
+ }
+
+ let [a,b]=debateQueue.shift();
+ runCompare(a,b);
+}
+
+function comparePair(i){
+ let g=data[currentWeight];
+
+ if(i===g.seeds.length-1) return;
+
+ let a=g.seeds[i][1];
+ let b=g.seeds[i+1][1];
+
+ runCompare(a,b);
+}
+
+function runCompare(a,b){
+ let g=data[currentWeight];
  let h=g.history;
  let common=g.common[a][b];
 
  let adv=0;
- let html=`<h3>${a} vs ${b}</h3>`;
+ let reasons=[];
 
- // HEAD TO HEAD
- if(h[a].wins.includes(b)){ html+=`✔ ${a} beat ${b}<br>`; adv+=5; }
- else if(h[b].wins.includes(a)){ html+=`✔ ${b} beat ${a}<br>`; adv-=5; }
+ // H2H
+ if(h[a].wins.includes(b)){ adv+=5; reasons.push(`${a} beat ${b}`); }
+ else if(h[b].wins.includes(a)){ adv-=5; reasons.push(`${b} beat ${a}`); }
 
  // RECORD
  let r1=h[a].wins.length-h[a].losses.length;
  let r2=h[b].wins.length-h[b].losses.length;
 
- html+=`${a}: ${h[a].wins.length}-${h[a].losses.length}<br>`;
- html+=`${b}: ${h[b].wins.length}-${h[b].losses.length}<br><br>`;
-
- if(r1>r2) adv+=2;
- else if(r2>r1) adv-=2;
+ if(r1>r2){ adv+=2; reasons.push(`${a} better record`); }
+ else if(r2>r1){ adv-=2; reasons.push(`${b} better record`); }
 
  // COMMON
- html+="<b>Common Opponents:</b><br>";
  common.forEach(c=>{
-   html+=`${c.opponent}: ${a}(${c.w1}) ${b}(${c.w2})<br>`;
-
-   if(c.w1==="W" && c.w2==="L") adv+=1;
-   if(c.w2==="W" && c.w1==="L") adv-=1;
+  if(c.w1==="W" && c.w2==="L"){ adv++; reasons.push(`${a} better vs ${c.opponent}`); }
+  if(c.w2==="W" && c.w1==="L"){ adv--; reasons.push(`${b} better vs ${c.opponent}`); }
  });
 
  // SOS
- let sosDiff=g.sos[a]-g.sos[b];
- adv+=sosDiff*3;
+ let diff=g.sos[a]-g.sos[b];
+ if(diff>0){ adv+=1; reasons.push(`${a} stronger schedule`); }
+ if(diff<0){ adv-=1; reasons.push(`${b} stronger schedule`); }
 
- // FINAL DECISION
- let winner=adv>1?a:adv<-1?b:"Too close to call";
+ let winner=adv>1?a:adv<-1?b:"Toss-up";
 
- html+=`<br><h2>🏆 Recommended: ${winner}</h2>`;
+ let html=`<div class="card">
+ <h2>${a} vs ${b}</h2>
+
+ <b>Records:</b><br>
+ ${a}: ${h[a].wins.length}-${h[a].losses.length}<br>
+ ${b}: ${h[b].wins.length}-${h[b].losses.length}<br><br>
+
+ <b>Key Factors:</b><br>
+ ${reasons.join("<br>")}
+
+ <div class="bigDecision">
+ 🏆 RECOMMENDED: ${winner}
+ </div>
+ </div>`;
 
  document.getElementById("details").innerHTML=html;
 }
