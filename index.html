@@ -2,68 +2,25 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeedIT Presentation</title>
+<title>SeedIT Meeting System</title>
 
 <style>
-body {
-    font-family: -apple-system, sans-serif;
-    background: #020617;
-    color: white;
-    margin:0;
-}
+body { font-family:sans-serif; background:#020617; color:white; }
+.container { max-width:1100px; margin:auto; padding:20px; }
 
-.container { max-width:1200px; margin:auto; padding:20px; }
+.header { text-align:center; font-size:28px; margin-bottom:10px; }
 
-.header {
-    text-align:center;
-    font-size:32px;
-    font-weight:bold;
-    margin-bottom:10px;
-}
+.card { background:rgba(255,255,255,0.05); padding:15px; border-radius:10px; margin:10px 0; }
 
-.sub { text-align:center; opacity:.7; margin-bottom:20px; }
+.row { display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid rgba(255,255,255,0.1); cursor:pointer; }
 
-.card {
-    background: rgba(255,255,255,0.05);
-    border-radius:12px;
-    padding:15px;
-    margin-bottom:15px;
-}
-
-.row {
-    display:flex;
-    justify-content:space-between;
-    padding:14px;
-    border-bottom:1px solid rgba(255,255,255,0.1);
-    cursor:pointer;
-    font-size:18px;
-}
-
-.row:hover { background:rgba(255,255,255,0.08); }
+button { padding:8px 12px; margin:5px; border:none; border-radius:6px; background:#2563eb; color:white; }
 
 .lock { color:#22c55e; }
 .lean { color:#facc15; }
 .debate { color:#ef4444; }
 
-button {
-    padding:10px 14px;
-    border:none;
-    border-radius:8px;
-    margin:5px;
-    background:#2563eb;
-    color:white;
-    font-weight:bold;
-}
-
-.bigDecision {
-    text-align:center;
-    font-size:26px;
-    margin-top:15px;
-    padding:15px;
-    background:rgba(255,255,255,0.08);
-    border-radius:12px;
-}
-
+.big { font-size:22px; margin-top:10px; }
 </style>
 </head>
 
@@ -71,15 +28,16 @@ button {
 
 <div class="container">
 
-<div class="header">🏆 SeedIT Presentation Mode</div>
-<div class="sub">Run your seeding meeting</div>
+<div class="header">🏆 SeedIT Meeting System</div>
 
 <div class="card">
 <input type="file" id="file">
-<button onclick="upload()">Load Season Data</button>
+<button onclick="upload()">Load Data</button>
+<button onclick="saveSession()">💾 Save</button>
+<button onclick="loadSession()">📂 Load</button>
 </div>
 
-<div id="controls" class="card"></div>
+<div id="controls"></div>
 <div id="main"></div>
 <div id="details"></div>
 
@@ -87,105 +45,69 @@ button {
 
 <script>
 
-let data={};
-let currentWeight=null;
-let debateQueue=[];
+let data = {};
+let currentWeight = null;
+let votes = {};
+let lockedSeeds = {};
 
 async function upload(){
  let f=document.getElementById("file").files[0];
  let fd=new FormData();
  fd.append("file",f);
 
- let res=await fetch("https://autoseed-backend.onrender.com/upload/",{
-  method:"POST",
-  body:fd
- });
-
+ let res=await fetch("https://autoseed-backend.onrender.com/upload/",{method:"POST",body:fd});
  data=await res.json();
 
- buildWeightSelector();
+ renderWeights();
 }
 
-function buildWeightSelector(){
+// ---------------- WEIGHT SELECT
+function renderWeights(){
  let html="<b>Select Weight:</b><br>";
 
  for(let w in data){
   html+=`<button onclick="showWeight('${w}')">${w}</button>`;
  }
 
- html+=`<br><br><button onclick="runDebateMode()">⚠ Run Debate Queue</button>`;
-
  document.getElementById("controls").innerHTML=html;
 }
 
-function getTier(c){
- if(c>=85) return "lock";
- if(c>=65) return "lean";
- return "debate";
-}
-
+// ---------------- SHOW WEIGHT
 function showWeight(w){
  currentWeight=w;
+
+ if(!lockedSeeds[w]){
+   lockedSeeds[w] = data[w].seeds.map(s => s[1]);
+ }
+
  let g=data[w];
+ let order=lockedSeeds[w];
 
- let html=`<div class="card"><h2>Weight ${w}</h2>`;
+ let html=`<div class="card"><h2>${w}</h2>
+ <button onclick="lockSeeds()">🔒 Lock Seeds</button>`;
 
- g.seeds.forEach((s,i)=>{
-  let conf=g.confidence[s[1]]||0;
-  let tier=getTier(conf);
+ order.forEach((name,i)=>{
+   let conf=g.confidence[name]||0;
+   let cls=conf>80?"lock":conf>60?"lean":"debate";
 
-  html+=`<div class="row" onclick="comparePair(${i})">
-  ${s[0]}. ${s[1]}
-  <span class="${tier}">${conf}% | SOS ${g.sos[s[1]]}</span>
-  </div>`;
+   html+=`<div class="row" onclick="compareIndex(${i})">
+   ${i+1}. ${name}
+   <span class="${cls}">${conf}% | SOS ${g.sos[name]}</span>
+   </div>`;
  });
 
  html+="</div>";
 
  document.getElementById("main").innerHTML=html;
-
- buildDebateQueue(w);
 }
 
-function buildDebateQueue(w){
- let g=data[w];
- debateQueue=[];
+// ---------------- COMPARE
+function compareIndex(i){
+ let order=lockedSeeds[currentWeight];
 
- g.seeds.forEach((s,i)=>{
-  if(i===g.seeds.length-1) return;
+ if(i===order.length-1) return;
 
-  let a=s[1];
-  let b=g.seeds[i+1][1];
-
-  let diff=Math.abs(g.confidence[a]-g.confidence[b]);
-
-  if(diff<8){
-    debateQueue.push([a,b]);
-  }
- });
-}
-
-function runDebateMode(){
- if(!currentWeight) return;
-
- if(!debateQueue.length){
-  document.getElementById("details").innerHTML="<b>No major debates</b>";
-  return;
- }
-
- let [a,b]=debateQueue.shift();
- runCompare(a,b);
-}
-
-function comparePair(i){
- let g=data[currentWeight];
-
- if(i===g.seeds.length-1) return;
-
- let a=g.seeds[i][1];
- let b=g.seeds[i+1][1];
-
- runCompare(a,b);
+ runCompare(order[i], order[i+1]);
 }
 
 function runCompare(a,b){
@@ -196,46 +118,98 @@ function runCompare(a,b){
  let adv=0;
  let reasons=[];
 
- // H2H
  if(h[a].wins.includes(b)){ adv+=5; reasons.push(`${a} beat ${b}`); }
  else if(h[b].wins.includes(a)){ adv-=5; reasons.push(`${b} beat ${a}`); }
 
- // RECORD
  let r1=h[a].wins.length-h[a].losses.length;
  let r2=h[b].wins.length-h[b].losses.length;
 
  if(r1>r2){ adv+=2; reasons.push(`${a} better record`); }
  else if(r2>r1){ adv-=2; reasons.push(`${b} better record`); }
 
- // COMMON
  common.forEach(c=>{
-  if(c.w1==="W" && c.w2==="L"){ adv++; reasons.push(`${a} better vs ${c.opponent}`); }
-  if(c.w2==="W" && c.w1==="L"){ adv--; reasons.push(`${b} better vs ${c.opponent}`); }
+   if(c.w1==="W" && c.w2==="L"){ adv++; }
+   if(c.w2==="W" && c.w1==="L"){ adv--; }
  });
 
- // SOS
  let diff=g.sos[a]-g.sos[b];
- if(diff>0){ adv+=1; reasons.push(`${a} stronger schedule`); }
- if(diff<0){ adv-=1; reasons.push(`${b} stronger schedule`); }
+ if(diff>0){ adv++; reasons.push(`${a} stronger schedule`); }
+ if(diff<0){ adv--; reasons.push(`${b} stronger schedule`); }
 
- let winner=adv>1?a:adv<-1?b:"Toss-up";
+ let winner=adv>0?a:adv<0?b:"Toss-up";
+
+ votes = { [a]:0, [b]:0 };
 
  let html=`<div class="card">
  <h2>${a} vs ${b}</h2>
 
- <b>Records:</b><br>
  ${a}: ${h[a].wins.length}-${h[a].losses.length}<br>
  ${b}: ${h[b].wins.length}-${h[b].losses.length}<br><br>
 
- <b>Key Factors:</b><br>
- ${reasons.join("<br>")}
+ <b>Reasons:</b><br>${reasons.join("<br>")}
 
- <div class="bigDecision">
- 🏆 RECOMMENDED: ${winner}
- </div>
+ <div class="big">🏆 Recommended: ${winner}</div>
+
+ <button onclick="vote('${a}')">Vote ${a}</button>
+ <button onclick="vote('${b}')">Vote ${b}</button>
+
+ <div id="voteResults"></div>
+
+ <button onclick="swap('${a}','${b}')">🔄 Swap Seeds</button>
+
  </div>`;
 
  document.getElementById("details").innerHTML=html;
+}
+
+// ---------------- VOTING
+function vote(name){
+ votes[name]++;
+
+ let html="Votes:<br>";
+ for(let k in votes){
+   html+=`${k}: ${votes[k]}<br>`;
+ }
+
+ document.getElementById("voteResults").innerHTML=html;
+}
+
+// ---------------- SWAP
+function swap(a,b){
+ let arr=lockedSeeds[currentWeight];
+
+ let i=arr.indexOf(a);
+ let j=arr.indexOf(b);
+
+ [arr[i],arr[j]]=[arr[j],arr[i]];
+
+ showWeight(currentWeight);
+}
+
+// ---------------- LOCK
+function lockSeeds(){
+ alert("Seeds locked for this weight");
+}
+
+// ---------------- SAVE
+function saveSession(){
+ localStorage.setItem("seedit_session", JSON.stringify({
+   data, lockedSeeds
+ }));
+ alert("Saved");
+}
+
+// ---------------- LOAD
+function loadSession(){
+ let s=localStorage.getItem("seedit_session");
+ if(!s) return alert("No saved session");
+
+ let obj=JSON.parse(s);
+ data=obj.data;
+ lockedSeeds=obj.lockedSeeds;
+
+ renderWeights();
+ alert("Loaded");
 }
 
 </script>
