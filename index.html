@@ -17,16 +17,6 @@ body {
     padding: 20px;
 }
 
-.header {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.logo {
-    font-size: 26px;
-    font-weight: bold;
-}
-
 .card {
     background: white;
     padding: 15px;
@@ -46,6 +36,7 @@ button {
 
 .primary { background: #3b82f6; color: white; }
 .secondary { background: #10b981; color: white; }
+.export { background: #6366f1; color: white; }
 
 .seed-row {
     display: flex;
@@ -56,12 +47,20 @@ button {
 }
 
 .seed-row:hover {
-    background: #f1f5ff;
+    background: #eef2ff;
 }
 
-.conf {
-    font-weight: bold;
-    color: #10b981;
+.conf { font-weight: bold; }
+
+.high { color: #16a34a; }
+.medium { color: #ca8a04; }
+.low { color: #dc2626; }
+
+.alert {
+    background: #fee2e2;
+    padding: 8px;
+    border-radius: 6px;
+    margin-bottom: 8px;
 }
 
 .details {
@@ -70,27 +69,12 @@ button {
     border-radius: 12px;
     margin-top: 15px;
 }
-
-.table {
-    margin-top: 10px;
-}
-
-.table-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 4px 0;
-    border-bottom: 1px solid #eee;
-}
 </style>
 </head>
 
 <body>
 
 <div class="container">
-
-<div class="header">
-    <div class="logo">SeedIT Wrestling</div>
-</div>
 
 <div class="card">
     <input type="file" id="file"><br><br>
@@ -111,6 +95,7 @@ button {
 <script>
 
 let globalData = {};
+let lastCompare = null;
 
 // ---------------- Upload
 async function upload(){
@@ -135,19 +120,14 @@ async function pasteImport(){
     let text = document.getElementById("pasteInput").value;
     if (!text) return alert("Paste data");
 
-    let lines = text.split("\n");
-    let matches = [];
-
-    lines.forEach(line => {
+    let matches = text.split("\n").map(line => {
         let parts = line.split(/dec|def|pin|tf|maj/i);
-        if (parts.length >= 2){
-            matches.push({
-                wrestlerA: parts[0].trim(),
-                wrestlerB: parts[1].trim(),
-                winner: parts[0].trim(),
-                weight: "unknown"
-            });
-        }
+        return {
+            wrestlerA: parts[0]?.trim(),
+            wrestlerB: parts[1]?.trim(),
+            winner: parts[0]?.trim(),
+            weight: "unknown"
+        };
     });
 
     let res = await fetch("https://autoseed-backend.onrender.com/upload/", {
@@ -168,17 +148,28 @@ function renderResults(data){
     for (let weight in data){
         let g = data[weight];
 
-        output += `<div class="card">`;
-        output += `<h2>Weight ${weight}</h2>`;
+        output += `<div class="card"><h2>Weight ${weight}</h2>`;
         output += `<button class="secondary" onclick="showCompare('${weight}')">Compare Wrestlers</button>`;
 
-        g.seeds.forEach(s => {
+        g.seeds.forEach((s, i) => {
             let conf = g.confidence[s[1]] || 0;
+
+            let level = conf > 85 ? "high" : conf > 65 ? "medium" : "low";
+
+            // ⚠️ controversial seeds
+            if (i < g.seeds.length - 1){
+                let next = g.seeds[i+1][1];
+                let diff = Math.abs(conf - (g.confidence[next] || 0));
+
+                if (diff <= 10){
+                    output += `<div class="alert">⚠ Close: ${s[1]} vs ${next}</div>`;
+                }
+            }
 
             output += `
                 <div class="seed-row" data-name="${s[1]}" data-weight="${weight}">
                     <span>${s[0]}. ${s[1]}</span>
-                    <span class="conf">${conf}%</span>
+                    <span class="conf ${level}">${conf}%</span>
                 </div>
             `;
         });
@@ -203,18 +194,9 @@ document.addEventListener("click", function(e){
 
     let html = `<h3>${name}</h3>`;
     html += `<b>Confidence:</b> ${conf}%<br><br>`;
+    html += `<b>Record:</b> ${h.wins.length}-${h.losses.length}<br><br>`;
 
-    html += "<b>Record:</b><br>";
-    html += `${h.wins.length}-${h.losses.length}<br><br>`;
-
-    html += "<b>Wins:</b><br>";
-    h.wins.forEach(w => html += `✔ ${w}<br>`);
-
-    html += "<br><b>Losses:</b><br>";
-    if (!h.losses.length) html += "None<br>";
-    h.losses.forEach(l => html += `❌ ${l}<br>`);
-
-    html += "<br><b>Why Seeded Here:</b><br>";
+    html += "<b>Why:</b><br>";
     reasons.forEach(r => html += `⭐ ${r}<br>`);
 
     document.getElementById("details").innerHTML = html;
@@ -241,45 +223,67 @@ function runCompare(weight){
     let h = globalData[weight].history;
     let common = globalData[weight].common;
 
+    let advantage = 0;
+
     let html = `<h3>${w1} vs ${w2}</h3>`;
 
     // Head-to-head
-    html += "<b>Head-to-Head:</b><br>";
     if (h[w1].wins.includes(w2)){
         html += `✔ ${w1} beat ${w2}<br>`;
+        advantage++;
     } else if (h[w2].wins.includes(w1)){
         html += `✔ ${w2} beat ${w1}<br>`;
-    } else {
-        html += "No match<br>";
+        advantage--;
     }
 
-    // Records
-    html += "<br><b>Record:</b><br>";
-    html += `${w1}: ${h[w1].wins.length}-${h[w1].losses.length}<br>`;
-    html += `${w2}: ${h[w2].wins.length}-${h[w2].losses.length}<br>`;
+    // Record
+    let r1 = h[w1].wins.length - h[w1].losses.length;
+    let r2 = h[w2].wins.length - h[w2].losses.length;
 
-    // Common opponents
-    html += "<br><b>Common Opponents:</b>";
+    if (r1 > r2) advantage++;
+    else if (r2 > r1) advantage--;
 
+    html += `<br>${w1}: ${h[w1].wins.length}-${h[w1].losses.length}`;
+    html += `<br>${w2}: ${h[w2].wins.length}-${h[w2].losses.length}<br>`;
+
+    // Common
     let list = common[w1][w2];
 
-    if (!list.length){
-        html += "<br>None";
-    } else {
-        html += "<div class='table'>";
-        list.forEach(c => {
-            html += `
-                <div class="table-row">
-                    <span>${c.opponent}</span>
-                    <span>${w1}(${c.w1})</span>
-                    <span>${w2}(${c.w2})</span>
-                </div>
-            `;
-        });
-        html += "</div>";
-    }
+    html += "<br><b>Common Opponents:</b><br>";
+
+    list.forEach(c => {
+        html += `${c.opponent}: ${w1}(${c.w1}) vs ${w2}(${c.w2})<br>`;
+
+        if (c.w1 === "W" && c.w2 === "L") advantage++;
+        if (c.w2 === "W" && c.w1 === "L") advantage--;
+    });
+
+    // Recommendation
+    let winner = advantage > 0 ? w1 : advantage < 0 ? w2 : "Toss-up";
+
+    html += `<br><h3>🏆 Recommended: ${winner}</h3>`;
+
+    // Save for export
+    lastCompare = {w1, w2, winner};
+
+    html += `<button class="export" onclick="exportReport()">Download Report</button>`;
 
     document.getElementById("details").innerHTML = html;
+}
+
+// ---------------- Export
+function exportReport(){
+    if (!lastCompare) return;
+
+    let csv = `Wrestler1,Wrestler2,Recommended\n${lastCompare.w1},${lastCompare.w2},${lastCompare.winner}`;
+
+    let blob = new Blob([csv], {type:"text/csv"});
+    let url = URL.createObjectURL(blob);
+
+    let a = document.createElement("a");
+    a.href = url;
+    a.download = "comparison_report.csv";
+    a.click();
 }
 
 </script>
