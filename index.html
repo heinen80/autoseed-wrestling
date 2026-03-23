@@ -12,10 +12,24 @@ body {
   color:white;
 }
 
-.container { max-width:1100px; margin:auto; padding:20px; }
+.container {
+  max-width:1100px;
+  margin:auto;
+  padding:20px;
+}
 
-.header { text-align:center; font-size:32px; font-weight:bold; }
-.sub { text-align:center; opacity:.7; margin-bottom:20px; }
+.logo {
+  width:280px;
+  max-width:90%;
+  display:block;
+  margin:0 auto 10px auto;
+}
+
+.sub {
+  text-align:center;
+  opacity:.7;
+  margin-bottom:20px;
+}
 
 .card {
   background: rgba(255,255,255,0.05);
@@ -32,7 +46,9 @@ body {
   cursor:pointer;
 }
 
-.row:hover { background:rgba(255,255,255,0.08); }
+.row:hover {
+  background:rgba(255,255,255,0.08);
+}
 
 .lock { color:#22c55e; }
 .lean { color:#facc15; }
@@ -51,7 +67,11 @@ button {
 .secondary { background:#10b981; }
 .warn { background:#dc2626; }
 
-.big { font-size:22px; margin-top:15px; text-align:center; }
+.big {
+  font-size:22px;
+  margin-top:15px;
+  text-align:center;
+}
 </style>
 </head>
 
@@ -59,17 +79,26 @@ button {
 
 <div class="container">
 
-<div class="header">🏆 SeedIT</div>
-<div class="sub">Seeding Meeting System</div>
-
-<div class="card">
-<input type="file" id="file">
-<button onclick="upload()">Upload Data</button>
-<button class="secondary" onclick="exportSeeds()">Export Seeds</button>
+<!-- HEADER -->
+<div class="card" style="text-align:center;">
+  <img src="/IMG_5539.png" class="logo">
+  <div class="sub">AI Tournament Seeding</div>
 </div>
 
+<!-- UPLOAD -->
+<div class="card">
+  <input type="file" id="file">
+  <button onclick="upload()">Upload Season Data</button>
+  <button class="secondary" onclick="exportSeeds()">Export Final Seeds</button>
+</div>
+
+<!-- WEIGHTS -->
 <div id="weights" class="card"></div>
+
+<!-- MAIN -->
 <div id="main"></div>
+
+<!-- DETAILS -->
 <div id="details" class="card"></div>
 
 </div>
@@ -119,7 +148,7 @@ async function selectWeight(w){
   renderWeight();
 }
 
-// ---------------- RENDER
+// ---------------- RENDER WEIGHT
 function getTier(c){
   if(c>=85) return "lock";
   if(c>=65) return "lean";
@@ -159,7 +188,6 @@ function compareIndex(i){
 // ---------------- DECISION ENGINE
 async function runCompare(a,b){
 
-  // RESET votes per matchup
   await fetch(API + `/session/${currentWeight}`, { method:"POST" });
 
   let g = data[currentWeight];
@@ -169,18 +197,15 @@ async function runCompare(a,b){
   let adv = 0;
   let reasons = [];
 
-  // H2H
   if(h[a].wins.includes(b)){ adv+=5; reasons.push(`${a} beat ${b}`); }
   else if(h[b].wins.includes(a)){ adv-=5; reasons.push(`${b} beat ${a}`); }
 
-  // RECORD
   let r1 = h[a].wins.length - h[a].losses.length;
   let r2 = h[b].wins.length - h[b].losses.length;
 
   if(r1>r2){ adv+=2; reasons.push(`${a} better record`); }
   else if(r2>r1){ adv-=2; reasons.push(`${b} better record`); }
 
-  // COMMON (FIXED STRONG)
   common.forEach(c=>{
     if(c.w1==="W" && c.w2==="L"){
       adv+=2;
@@ -192,7 +217,6 @@ async function runCompare(a,b){
     }
   });
 
-  // SOS
   let diff = g.sos[a] - g.sos[b];
   if(diff>0){ adv+=1; reasons.push(`${a} stronger schedule`); }
   if(diff<0){ adv-=1; reasons.push(`${b} stronger schedule`); }
@@ -220,7 +244,7 @@ async function runCompare(a,b){
   pollVotes();
 }
 
-// ---------------- VOTING
+// ---------------- VOTE
 async function vote(name){
   await fetch(API + `/vote/${currentWeight}`, {
     method:"POST",
@@ -229,7 +253,7 @@ async function vote(name){
   });
 }
 
-// ---------------- POLLING (FIXED)
+// ---------------- POLL (FIXED)
 function pollVotes(){
   if(voteInterval) clearInterval(voteInterval);
 
@@ -249,12 +273,9 @@ function pollVotes(){
 // ---------------- SWAP
 function swap(a,b){
   let arr = lockedSeeds[currentWeight];
-
   let i = arr.indexOf(a);
   let j = arr.indexOf(b);
-
   [arr[i], arr[j]] = [arr[j], arr[i]];
-
   renderWeight();
 }
 
@@ -292,7 +313,7 @@ function exportSeeds(){
 
   let a = document.createElement("a");
   a.href = url;
-  a.download = "seeds.csv";
+  a.download = "final_seeds.csv";
   a.click();
 }
 
