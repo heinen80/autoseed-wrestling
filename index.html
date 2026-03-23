@@ -2,25 +2,14 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeedIT Meeting System</title>
+<title>SeedIT Live</title>
 
 <style>
 body { font-family:sans-serif; background:#020617; color:white; }
 .container { max-width:1100px; margin:auto; padding:20px; }
-
-.header { text-align:center; font-size:28px; margin-bottom:10px; }
-
-.card { background:rgba(255,255,255,0.05); padding:15px; border-radius:10px; margin:10px 0; }
-
+.card { background:rgba(255,255,255,0.05); padding:15px; margin:10px 0; border-radius:10px; }
 .row { display:flex; justify-content:space-between; padding:10px; border-bottom:1px solid rgba(255,255,255,0.1); cursor:pointer; }
-
-button { padding:8px 12px; margin:5px; border:none; border-radius:6px; background:#2563eb; color:white; }
-
-.lock { color:#22c55e; }
-.lean { color:#facc15; }
-.debate { color:#ef4444; }
-
-.big { font-size:22px; margin-top:10px; }
+button { padding:8px; margin:5px; border:none; border-radius:6px; background:#2563eb; color:white; }
 </style>
 </head>
 
@@ -28,16 +17,13 @@ button { padding:8px 12px; margin:5px; border:none; border-radius:6px; backgroun
 
 <div class="container">
 
-<div class="header">🏆 SeedIT Meeting System</div>
-
 <div class="card">
 <input type="file" id="file">
-<button onclick="upload()">Load Data</button>
-<button onclick="saveSession()">💾 Save</button>
-<button onclick="loadSession()">📂 Load</button>
+<button onclick="upload()">Upload</button>
+<button onclick="exportSeeds()">Export Bracket</button>
 </div>
 
-<div id="controls"></div>
+<div id="weights"></div>
 <div id="main"></div>
 <div id="details"></div>
 
@@ -45,11 +31,9 @@ button { padding:8px 12px; margin:5px; border:none; border-radius:6px; backgroun
 
 <script>
 
-let data = {};
-let currentWeight = null;
-let votes = {};
-let lockedSeeds = {};
+let data={}, currentWeight=null, currentPair=null;
 
+// ---------------- UPLOAD
 async function upload(){
  let f=document.getElementById("file").files[0];
  let fd=new FormData();
@@ -61,38 +45,33 @@ async function upload(){
  renderWeights();
 }
 
-// ---------------- WEIGHT SELECT
+// ---------------- WEIGHTS
 function renderWeights(){
- let html="<b>Select Weight:</b><br>";
-
+ let html="";
  for(let w in data){
-  html+=`<button onclick="showWeight('${w}')">${w}</button>`;
+  html+=`<button onclick="selectWeight('${w}')">${w}</button>`;
  }
-
- document.getElementById("controls").innerHTML=html;
+ document.getElementById("weights").innerHTML=html;
 }
 
-// ---------------- SHOW WEIGHT
-function showWeight(w){
+// ---------------- SELECT WEIGHT
+async function selectWeight(w){
  currentWeight=w;
 
- if(!lockedSeeds[w]){
-   lockedSeeds[w] = data[w].seeds.map(s => s[1]);
- }
+ await fetch(`https://autoseed-backend.onrender.com/session/${w}`,{method:"POST"});
 
- let g=data[w];
- let order=lockedSeeds[w];
+ renderWeight();
+}
 
- let html=`<div class="card"><h2>${w}</h2>
- <button onclick="lockSeeds()">🔒 Lock Seeds</button>`;
+// ---------------- RENDER WEIGHT
+function renderWeight(){
+ let g=data[currentWeight];
+ let html=`<div class="card"><h2>${currentWeight}</h2>`;
 
- order.forEach((name,i)=>{
-   let conf=g.confidence[name]||0;
-   let cls=conf>80?"lock":conf>60?"lean":"debate";
-
-   html+=`<div class="row" onclick="compareIndex(${i})">
-   ${i+1}. ${name}
-   <span class="${cls}">${conf}% | SOS ${g.sos[name]}</span>
+ g.seeds.forEach((s,i)=>{
+   html+=`<div class="row" onclick="compare(${i})">
+   ${s[0]}. ${s[1]}
+   <span>${g.confidence[s[1]]}% | SOS ${g.sos[s[1]]}</span>
    </div>`;
  });
 
@@ -102,14 +81,19 @@ function showWeight(w){
 }
 
 // ---------------- COMPARE
-function compareIndex(i){
- let order=lockedSeeds[currentWeight];
+function compare(i){
+ let g=data[currentWeight];
+ if(i===g.seeds.length-1) return;
 
- if(i===order.length-1) return;
+ let a=g.seeds[i][1];
+ let b=g.seeds[i+1][1];
 
- runCompare(order[i], order[i+1]);
+ currentPair=[a,b];
+
+ runCompare(a,b);
 }
 
+// ---------------- DECISION ENGINE
 function runCompare(a,b){
  let g=data[currentWeight];
  let h=g.history;
@@ -136,9 +120,7 @@ function runCompare(a,b){
  if(diff>0){ adv++; reasons.push(`${a} stronger schedule`); }
  if(diff<0){ adv--; reasons.push(`${b} stronger schedule`); }
 
- let winner=adv>0?a:adv<0?b:"Toss-up";
-
- votes = { [a]:0, [b]:0 };
+ let winner=adv>0?a:adv<0?b:"Too close";
 
  let html=`<div class="card">
  <h2>${a} vs ${b}</h2>
@@ -148,68 +130,59 @@ function runCompare(a,b){
 
  <b>Reasons:</b><br>${reasons.join("<br>")}
 
- <div class="big">🏆 Recommended: ${winner}</div>
+ <h2>🏆 ${winner}</h2>
 
  <button onclick="vote('${a}')">Vote ${a}</button>
  <button onclick="vote('${b}')">Vote ${b}</button>
 
- <div id="voteResults"></div>
-
- <button onclick="swap('${a}','${b}')">🔄 Swap Seeds</button>
-
+ <div id="votes"></div>
  </div>`;
 
  document.getElementById("details").innerHTML=html;
+
+ pollVotes();
 }
 
-// ---------------- VOTING
-function vote(name){
- votes[name]++;
-
- let html="Votes:<br>";
- for(let k in votes){
-   html+=`${k}: ${votes[k]}<br>`;
- }
-
- document.getElementById("voteResults").innerHTML=html;
+// ---------------- VOTE
+async function vote(name){
+ await fetch(`https://autoseed-backend.onrender.com/vote/${currentWeight}`,{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({name})
+ });
 }
 
-// ---------------- SWAP
-function swap(a,b){
- let arr=lockedSeeds[currentWeight];
+// ---------------- LIVE POLLING
+async function pollVotes(){
+ setInterval(async ()=>{
+   let res=await fetch(`https://autoseed-backend.onrender.com/votes/${currentWeight}`);
+   let v=await res.json();
 
- let i=arr.indexOf(a);
- let j=arr.indexOf(b);
+   let html="<b>Live Votes:</b><br>";
+   for(let k in v.votes){
+     html+=`${k}: ${v.votes[k]}<br>`;
+   }
 
- [arr[i],arr[j]]=[arr[j],arr[i]];
-
- showWeight(currentWeight);
+   document.getElementById("votes").innerHTML=html;
+ },2000);
 }
 
-// ---------------- LOCK
-function lockSeeds(){
- alert("Seeds locked for this weight");
-}
+// ---------------- EXPORT
+function exportSeeds(){
+ let g=data[currentWeight];
+ let rows=["Seed,Wrestler"];
 
-// ---------------- SAVE
-function saveSession(){
- localStorage.setItem("seedit_session", JSON.stringify({
-   data, lockedSeeds
- }));
- alert("Saved");
-}
+ g.seeds.forEach(s=>{
+   rows.push(`${s[0]},${s[1]}`);
+ });
 
-// ---------------- LOAD
-function loadSession(){
- let s=localStorage.getItem("seedit_session");
- if(!s) return alert("No saved session");
+ let blob=new Blob([rows.join("\n")],{type:"text/csv"});
+ let url=URL.createObjectURL(blob);
 
- let obj=JSON.parse(s);
- data=obj.data;
- lockedSeeds=obj.lockedSeeds;
-
- renderWeights();
- alert("Loaded");
+ let a=document.createElement("a");
+ a.href=url;
+ a.download="seeds.csv";
+ a.click();
 }
 
 </script>
