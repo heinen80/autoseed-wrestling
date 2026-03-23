@@ -13,21 +13,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------
-# GLOBAL SESSION STORE
-# ---------------------------
 sessions = {}
 
-# ---------------------------
-# HEALTH CHECK
-# ---------------------------
 @app.get("/")
 def root():
     return {"status": "ok"}
 
-# ---------------------------
-# HISTORY
-# ---------------------------
+# ---------------- HISTORY
 def build_history(matches):
     history = {}
     for m in matches:
@@ -45,9 +37,7 @@ def build_history(matches):
 
     return history
 
-# ---------------------------
-# SOS
-# ---------------------------
+# ---------------- SOS
 def build_sos(history):
     sos = {}
     for w in history:
@@ -63,9 +53,7 @@ def build_sos(history):
 
     return sos
 
-# ---------------------------
-# COMMON OPPONENTS
-# ---------------------------
+# ---------------- COMMON
 def build_common(history):
     common = {}
     for w1 in history:
@@ -89,61 +77,38 @@ def build_common(history):
 
     return common
 
-# ---------------------------
-# COMPARE SCORE (CORE LOGIC)
-# ---------------------------
-def compare_score(a, b, history, sos):
-    score = 0
-
-    # Head-to-head
-    if b in history[a]["wins"]:
-        score += 5
-    elif a in history[b]["wins"]:
-        score -= 5
-
-    # Record
-    r1 = len(history[a]["wins"]) - len(history[a]["losses"])
-    r2 = len(history[b]["wins"]) - len(history[b]["losses"])
-    score += (r1 - r2) * 0.2
-
-    # Common opponents
-    common = set(history[a]["wins"] + history[a]["losses"]) & \
-             set(history[b]["wins"] + history[b]["losses"])
-
-    for c in common:
-        if c in history[a]["wins"] and c in history[b]["losses"]:
-            score += 1
-        elif c in history[b]["wins"] and c in history[a]["losses"]:
-            score -= 1
-
-    # SOS
-    score += (sos[a] - sos[b]) * 5
-
-    return score
-
-# ---------------------------
-# RANKING (USES COMPARE)
-# ---------------------------
+# ---------------- RANKING (FIXED)
 def compute_rankings(history, sos):
     wrestlers = list(history.keys())
+    scores = {}
 
-    scores = {w: 0 for w in wrestlers}
+    for w in wrestlers:
+        wins = len(history[w]["wins"])
+        losses = len(history[w]["losses"])
+        total = wins + losses
 
-    for w1 in wrestlers:
-        for w2 in wrestlers:
-            if w1 == w2:
-                continue
+        win_pct = wins / total if total else 0
+        score = 0
 
-            s = compare_score(w1, w2, history, sos)
+        score += win_pct * 50
 
-            if s > 0:
-                scores[w1] += 1
+        for opp in history[w]["wins"]:
+            opp_total = len(history[opp]["wins"]) + len(history[opp]["losses"])
+            if opp_total:
+                score += (len(history[opp]["wins"]) / opp_total) * 10
+
+        for opp in history[w]["losses"]:
+            opp_total = len(history[opp]["wins"]) + len(history[opp]["losses"])
+            if opp_total:
+                score -= (1 - (len(history[opp]["wins"]) / opp_total)) * 8
+
+        score += sos[w] * 20
+
+        scores[w] = score
 
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
-# ---------------------------
-# CONFIDENCE
-# ---------------------------
+# ---------------- CONFIDENCE
 def build_confidence(seeds, history, sos):
     conf = {}
 
@@ -156,15 +121,14 @@ def build_confidence(seeds, history, sos):
 
         w2 = seeds[i+1][0]
 
-        s = compare_score(w1, w2, history, sos)
+        diff = len(history[w1]["wins"]) - len(history[w2]["wins"])
+        diff += (sos[w1] - sos[w2]) * 10
 
-        conf[w1] = max(5, min(95, round(50 + s*5)))
+        conf[w1] = max(10, min(95, int(50 + diff*5)))
 
     return conf
 
-# ---------------------------
-# UPLOAD
-# ---------------------------
+# ---------------- UPLOAD
 @app.post("/upload/")
 async def upload(request: Request, file: UploadFile = File(None)):
 
@@ -202,9 +166,7 @@ async def upload(request: Request, file: UploadFile = File(None)):
 
     return JSONResponse(results)
 
-# ---------------------------
-# SESSION / VOTING (FIXED)
-# ---------------------------
+# ---------------- VOTING
 @app.post("/session/{weight}")
 def create_session(weight: str):
     sessions[weight] = {"votes": {}}
