@@ -17,24 +17,14 @@ app.add_middleware(
 def root():
     return {"status": "ok"}
 
-
-def compute_rankings(matches):
-    scores = {}
-    for m in matches:
-        w1, w2, winner = m["wrestlerA"], m["wrestlerB"], m["winner"]
-        scores.setdefault(w1, 0)
-        scores.setdefault(w2, 0)
-        if winner == w1:
-            scores[w1] += 1
-        else:
-            scores[w2] += 1
-    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
-
-
+# ---------------------------
+# History
+# ---------------------------
 def build_history(matches):
     history = {}
     for m in matches:
         w1, w2, winner = m["wrestlerA"], m["wrestlerB"], m["winner"]
+
         history.setdefault(w1, {"wins": [], "losses": []})
         history.setdefault(w2, {"wins": [], "losses": []})
 
@@ -44,61 +34,61 @@ def build_history(matches):
         else:
             history[w2]["wins"].append(w1)
             history[w1]["losses"].append(w2)
+
     return history
 
-
-# 🔥 NEW — Strength of Schedule
+# ---------------------------
+# SOS
+# ---------------------------
 def build_sos(history):
     sos = {}
-
     for w in history:
-        opponents = history[w]["wins"] + history[w]["losses"]
-
-        if not opponents:
+        opps = history[w]["wins"] + history[w]["losses"]
+        if not opps:
             sos[w] = 0
             continue
 
-        opp_pcts = []
-        for o in opponents:
+        vals = []
+        for o in opps:
             wins = len(history[o]["wins"])
             losses = len(history[o]["losses"])
             total = wins + losses
-            if total > 0:
-                opp_pcts.append(wins / total)
+            if total:
+                vals.append(wins / total)
 
-        sos[w] = round(sum(opp_pcts) / len(opp_pcts), 3) if opp_pcts else 0
+        sos[w] = round(sum(vals)/len(vals),3) if vals else 0
 
     return sos
 
+# ---------------------------
+# Ranking (IMPROVED)
+# ---------------------------
+def compute_rankings(history, sos):
+    scores = {}
 
-def build_confidence(seeds, history):
-    confidence = {}
+    for w in history:
+        wins = len(history[w]["wins"])
+        losses = len(history[w]["losses"])
+        total = wins + losses
 
-    for i in range(len(seeds)):
-        w1 = seeds[i][0]
+        pct = wins/total if total else 0
 
-        if i == len(seeds)-1:
-            confidence[w1] = 60
-            continue
+        scores[w] = (
+            wins * 1.0 +
+            pct * 10 +
+            sos[w] * 10
+        )
 
-        w2 = seeds[i+1][0]
+    # head-to-head boost
+    for w in history:
+        for opp in history[w]["wins"]:
+            scores[w] += 0.5
 
-        score = 0
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
-        if w2 in history[w1]["wins"]:
-            score += 2
-        elif w1 in history[w2]["wins"]:
-            score -= 2
-
-        diff = len(history[w1]["wins"]) - len(history[w2]["wins"])
-        score += diff * 0.05
-
-        conf = 50 + score * 10
-        confidence[w1] = max(5, min(95, round(conf)))
-
-    return confidence
-
-
+# ---------------------------
+# Common Opponents
+# ---------------------------
 def build_common(history):
     common = {}
     for w1 in history:
@@ -119,17 +109,65 @@ def build_common(history):
                 })
 
             common[w1][w2] = rows
+
     return common
 
+# ---------------------------
+# Compare Score
+# ---------------------------
+def compare_score(w1, w2, history, sos):
+    score = 0
 
-def build_bracket(seeds):
-    wrestlers = [w[0] for w in seeds]
-    bracket = []
-    while len(wrestlers) >= 2:
-        bracket.append([wrestlers.pop(0), wrestlers.pop(-1)])
-    return bracket
+    # HEAD TO HEAD (strongest)
+    if w2 in history[w1]["wins"]:
+        score += 5
+    elif w1 in history[w2]["wins"]:
+        score -= 5
 
+    # COMMON
+    common = set(history[w1]["wins"] + history[w1]["losses"]) & \
+             set(history[w2]["wins"] + history[w2]["losses"])
 
+    for c in common:
+        if c in history[w1]["wins"] and c in history[w2]["losses"]:
+            score += 1
+        elif c in history[w2]["wins"] and c in history[w1]["losses"]:
+            score -= 1
+
+    # SOS
+    score += (sos[w1] - sos[w2]) * 5
+
+    # RECORD
+    r1 = len(history[w1]["wins"]) - len(history[w1]["losses"])
+    r2 = len(history[w2]["wins"]) - len(history[w2]["losses"])
+    score += (r1 - r2) * 0.1
+
+    return score
+
+# ---------------------------
+# Confidence
+# ---------------------------
+def build_confidence(seeds, history, sos):
+    conf = {}
+
+    for i in range(len(seeds)):
+        w1 = seeds[i][0]
+
+        if i == len(seeds)-1:
+            conf[w1] = 60
+            continue
+
+        w2 = seeds[i+1][0]
+
+        s = compare_score(w1, w2, history, sos)
+
+        conf[w1] = max(5, min(95, round(50 + s*5)))
+
+    return conf
+
+# ---------------------------
+# MAIN
+# ---------------------------
 @app.post("/upload/")
 async def upload(request: Request, file: UploadFile = File(None)):
 
@@ -149,19 +187,20 @@ async def upload(request: Request, file: UploadFile = File(None)):
     results = {}
 
     for weight, group in df.groupby("weight"):
-        group_matches = group.to_dict(orient="records")
+        gm = group.to_dict(orient="records")
 
-        seeds = compute_rankings(group_matches)
-        history = build_history(group_matches)
+        history = build_history(gm)
         sos = build_sos(history)
+        seeds = compute_rankings(history, sos)
+        common = build_common(history)
+        confidence = build_confidence(seeds, history, sos)
 
         results[str(weight)] = {
-            "seeds": [(i+1, w[0], w[1]) for i, w in enumerate(seeds)],
+            "seeds": [(i+1, w[0]) for i,w in enumerate(seeds)],
             "history": history,
-            "confidence": build_confidence(seeds, history),
-            "common": build_common(history),
-            "bracket": build_bracket(seeds),
-            "sos": sos
+            "sos": sos,
+            "common": common,
+            "confidence": confidence
         }
 
     return JSONResponse(results)
