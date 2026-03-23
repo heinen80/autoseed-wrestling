@@ -53,14 +53,40 @@ def build_sos(history):
 
     return sos
 
+# ---------------- QUALITY
+def build_quality(history):
+    top_wins = {}
+    bad_losses = {}
+
+    for w in history:
+        top_wins[w] = []
+        bad_losses[w] = []
+
+        for opp in history[w]["wins"]:
+            total = len(history[opp]["wins"]) + len(history[opp]["losses"])
+            if total == 0: continue
+            pct = len(history[opp]["wins"]) / total
+
+            if pct >= 0.7:
+                top_wins[w].append(opp)
+
+        for opp in history[w]["losses"]:
+            total = len(history[opp]["wins"]) + len(history[opp]["losses"])
+            if total == 0: continue
+            pct = len(history[opp]["wins"]) / total
+
+            if pct <= 0.3:
+                bad_losses[w].append(opp)
+
+    return top_wins, bad_losses
+
 # ---------------- COMMON
 def build_common(history):
     common = {}
     for w1 in history:
         common[w1] = {}
         for w2 in history:
-            if w1 == w2:
-                continue
+            if w1 == w2: continue
 
             c = set(history[w1]["wins"] + history[w1]["losses"]) & \
                 set(history[w2]["wins"] + history[w2]["losses"])
@@ -77,20 +103,17 @@ def build_common(history):
 
     return common
 
-# ---------------- RANKING (FIXED)
+# ---------------- RANKING
 def compute_rankings(history, sos):
-    wrestlers = list(history.keys())
     scores = {}
 
-    for w in wrestlers:
+    for w in history:
         wins = len(history[w]["wins"])
         losses = len(history[w]["losses"])
         total = wins + losses
 
         win_pct = wins / total if total else 0
-        score = 0
-
-        score += win_pct * 50
+        score = win_pct * 50
 
         for opp in history[w]["wins"]:
             opp_total = len(history[opp]["wins"]) + len(history[opp]["losses"])
@@ -103,7 +126,6 @@ def compute_rankings(history, sos):
                 score -= (1 - (len(history[opp]["wins"]) / opp_total)) * 8
 
         score += sos[w] * 20
-
         scores[w] = score
 
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -111,7 +133,6 @@ def compute_rankings(history, sos):
 # ---------------- CONFIDENCE
 def build_confidence(seeds, history, sos):
     conf = {}
-
     for i in range(len(seeds)):
         w1 = seeds[i][0]
 
@@ -152,6 +173,7 @@ async def upload(request: Request, file: UploadFile = File(None)):
 
         history = build_history(gm)
         sos = build_sos(history)
+        top_wins, bad_losses = build_quality(history)
         seeds = compute_rankings(history, sos)
         common = build_common(history)
         confidence = build_confidence(seeds, history, sos)
@@ -161,7 +183,9 @@ async def upload(request: Request, file: UploadFile = File(None)):
             "history": history,
             "sos": sos,
             "common": common,
-            "confidence": confidence
+            "confidence": confidence,
+            "top_wins": top_wins,
+            "bad_losses": bad_losses
         }
 
     return JSONResponse(results)
