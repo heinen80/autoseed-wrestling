@@ -13,12 +13,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------
+# GLOBAL SESSION STORE
+# ---------------------------
+sessions = {}
+
+# ---------------------------
+# HEALTH CHECK
+# ---------------------------
 @app.get("/")
 def root():
     return {"status": "ok"}
 
 # ---------------------------
-# History
+# HISTORY
 # ---------------------------
 def build_history(matches):
     history = {}
@@ -44,50 +52,19 @@ def build_sos(history):
     sos = {}
     for w in history:
         opps = history[w]["wins"] + history[w]["losses"]
-        if not opps:
-            sos[w] = 0
-            continue
-
         vals = []
+
         for o in opps:
-            wins = len(history[o]["wins"])
-            losses = len(history[o]["losses"])
-            total = wins + losses
+            total = len(history[o]["wins"]) + len(history[o]["losses"])
             if total:
-                vals.append(wins / total)
+                vals.append(len(history[o]["wins"]) / total)
 
         sos[w] = round(sum(vals)/len(vals),3) if vals else 0
 
     return sos
 
 # ---------------------------
-# Ranking (IMPROVED)
-# ---------------------------
-def compute_rankings(history, sos):
-    scores = {}
-
-    for w in history:
-        wins = len(history[w]["wins"])
-        losses = len(history[w]["losses"])
-        total = wins + losses
-
-        pct = wins/total if total else 0
-
-        scores[w] = (
-            wins * 1.0 +
-            pct * 10 +
-            sos[w] * 10
-        )
-
-    # head-to-head boost
-    for w in history:
-        for opp in history[w]["wins"]:
-            scores[w] += 0.5
-
-    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
-
-# ---------------------------
-# Common Opponents
+# COMMON OPPONENTS
 # ---------------------------
 def build_common(history):
     common = {}
@@ -113,39 +90,59 @@ def build_common(history):
     return common
 
 # ---------------------------
-# Compare Score
+# COMPARE SCORE (CORE LOGIC)
 # ---------------------------
-def compare_score(w1, w2, history, sos):
+def compare_score(a, b, history, sos):
     score = 0
 
-    # HEAD TO HEAD (strongest)
-    if w2 in history[w1]["wins"]:
+    # Head-to-head
+    if b in history[a]["wins"]:
         score += 5
-    elif w1 in history[w2]["wins"]:
+    elif a in history[b]["wins"]:
         score -= 5
 
-    # COMMON
-    common = set(history[w1]["wins"] + history[w1]["losses"]) & \
-             set(history[w2]["wins"] + history[w2]["losses"])
+    # Record
+    r1 = len(history[a]["wins"]) - len(history[a]["losses"])
+    r2 = len(history[b]["wins"]) - len(history[b]["losses"])
+    score += (r1 - r2) * 0.2
+
+    # Common opponents
+    common = set(history[a]["wins"] + history[a]["losses"]) & \
+             set(history[b]["wins"] + history[b]["losses"])
 
     for c in common:
-        if c in history[w1]["wins"] and c in history[w2]["losses"]:
+        if c in history[a]["wins"] and c in history[b]["losses"]:
             score += 1
-        elif c in history[w2]["wins"] and c in history[w1]["losses"]:
+        elif c in history[b]["wins"] and c in history[a]["losses"]:
             score -= 1
 
     # SOS
-    score += (sos[w1] - sos[w2]) * 5
-
-    # RECORD
-    r1 = len(history[w1]["wins"]) - len(history[w1]["losses"])
-    r2 = len(history[w2]["wins"]) - len(history[w2]["losses"])
-    score += (r1 - r2) * 0.1
+    score += (sos[a] - sos[b]) * 5
 
     return score
 
 # ---------------------------
-# Confidence
+# RANKING (USES COMPARE)
+# ---------------------------
+def compute_rankings(history, sos):
+    wrestlers = list(history.keys())
+
+    scores = {w: 0 for w in wrestlers}
+
+    for w1 in wrestlers:
+        for w2 in wrestlers:
+            if w1 == w2:
+                continue
+
+            s = compare_score(w1, w2, history, sos)
+
+            if s > 0:
+                scores[w1] += 1
+
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+# ---------------------------
+# CONFIDENCE
 # ---------------------------
 def build_confidence(seeds, history, sos):
     conf = {}
@@ -166,7 +163,7 @@ def build_confidence(seeds, history, sos):
     return conf
 
 # ---------------------------
-# MAIN
+# UPLOAD
 # ---------------------------
 @app.post("/upload/")
 async def upload(request: Request, file: UploadFile = File(None)):
@@ -204,38 +201,26 @@ async def upload(request: Request, file: UploadFile = File(None)):
         }
 
     return JSONResponse(results)
-# ---------------------------
-# IN-MEMORY SESSION STORE
-# ---------------------------
-sessions = {}
 
 # ---------------------------
-# CREATE SESSION
+# SESSION / VOTING (FIXED)
 # ---------------------------
 @app.post("/session/{weight}")
 def create_session(weight: str):
     sessions[weight] = {"votes": {}}
     return {"status": "created"}
 
-# ---------------------------
-# CAST VOTE
-# ---------------------------
 @app.post("/vote/{weight}")
 async def vote(weight: str, request: Request):
     data = await request.json()
     name = data.get("name")
 
-    if weight not in sessions:
-        sessions[weight] = {"votes": {}}
-
+    sessions.setdefault(weight, {"votes": {}})
     sessions[weight]["votes"].setdefault(name, 0)
     sessions[weight]["votes"][name] += 1
 
     return sessions[weight]
 
-# ---------------------------
-# GET VOTES
-# ---------------------------
 @app.get("/votes/{weight}")
 def get_votes(weight: str):
-    return sessions.get(weight, {"votes": {}})
+    return sessions.setdefault(weight, {"votes": {}})
