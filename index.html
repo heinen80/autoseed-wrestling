@@ -7,81 +7,161 @@
 <style>
 body {
   font-family: -apple-system, sans-serif;
-  margin:0;
-  background: linear-gradient(135deg,#0f172a,#1e293b);
-  color:white;
+  margin: 0;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: white;
 }
 
 .container {
-  max-width:1100px;
-  margin:auto;
-  padding:20px;
+  max-width: 1120px;
+  margin: auto;
+  padding: 20px;
 }
 
 .logo {
-  width:280px;
-  max-width:90%;
-  display:block;
-  margin:0 auto 10px auto;
+  width: 320px;
+  max-width: 92%;
+  display: block;
+  margin: 0 auto 10px auto;
 }
 
 .sub {
-  text-align:center;
-  opacity:.7;
-  margin-bottom:20px;
+  text-align: center;
+  opacity: 0.8;
+  margin-bottom: 20px;
 }
 
 .card {
   background: rgba(255,255,255,0.05);
-  border-radius:12px;
-  padding:15px;
-  margin:10px 0;
+  border-radius: 14px;
+  padding: 16px;
+  margin: 12px 0;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.15);
 }
 
 .row {
-  display:flex;
-  justify-content:space-between;
-  padding:12px;
-  border-bottom:1px solid rgba(255,255,255,0.1);
-  cursor:pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.09);
+  cursor: pointer;
 }
 
 .row:hover {
-  background:rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.08);
 }
 
-.lock { color:#22c55e; }
-.lean { color:#facc15; }
-.debate { color:#ef4444; }
+.left-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.right-col {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lock { color: #22c55e; }
+.lean { color: #facc15; }
+.debate { color: #ef4444; }
 
 button {
-  padding:10px;
-  margin:5px;
-  border:none;
-  border-radius:8px;
-  background:#2563eb;
-  color:white;
-  font-weight:bold;
+  padding: 10px 12px;
+  margin: 5px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-weight: 700;
   transition: all 0.2s ease;
 }
 
 button:hover {
   transform: translateY(-2px);
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
-.secondary { background:#10b981; }
-.warn { background:#dc2626; }
+.secondary { background: #10b981; }
+.warn { background: #dc2626; }
+.dark { background: #334155; }
 
 .big {
-  font-size:22px;
-  margin-top:15px;
-  text-align:center;
+  font-size: 24px;
+  margin-top: 15px;
+  text-align: center;
 }
 
 h2 {
   margin: 0;
-  font-weight: 600;
+  font-weight: 700;
+}
+
+h3 {
+  margin-top: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.alert {
+  background: rgba(239,68,68,0.18);
+  border: 1px solid rgba(239,68,68,0.35);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 8px 0;
+}
+
+.good {
+  background: rgba(34,197,94,0.15);
+  border: 1px solid rgba(34,197,94,0.3);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 8px 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: 1.1fr 0.9fr;
+  }
+}
+
+.muted {
+  opacity: 0.78;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  margin: 14px 0;
+}
+
+.input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+input[type="text"], select {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  min-width: 150px;
 }
 </style>
 </head>
@@ -90,66 +170,73 @@ h2 {
 
 <div class="container">
 
-<!-- HERO -->
-<div class="card" style="text-align:center; padding:30px 20px;">
-  <img src="https://raw.githubusercontent.com/heinen80/autoseed-wrestling/main/IMG_5539.png" class="logo">
-
-  <h2 style="margin-top:10px;">Run Your Seeding Meeting Before It Starts</h2>
-
-  <div class="sub">
-    Head-to-head • Common opponents • Strength of schedule • Live coach voting
+  <div class="card" style="text-align:center; padding:30px 20px;">
+    <img src="/IMG_5539.png" class="logo" alt="SeedIT logo">
+    <h2 style="margin-top:10px;">Run Your Seeding Meeting Before It Starts</h2>
+    <div class="sub">
+      Head-to-head • Common opponents • Strength of schedule • Top wins • Bad losses • Live coach voting
+    </div>
+    <button onclick="document.getElementById('file').click()">Upload Tournament Data</button>
   </div>
 
-  <button onclick="document.getElementById('file').click()">Upload Tournament Data</button>
-</div>
+  <div class="card">
+    <div class="input-row">
+      <input type="file" id="file" style="display:none">
+      <button onclick="upload()">Upload Season Data</button>
+      <button class="secondary" onclick="exportSeeds()">Export Final Seeds</button>
+      <button class="dark" onclick="exportMeetingReport()">Export Meeting Report</button>
+    </div>
+  </div>
 
-<!-- UPLOAD -->
-<div class="card">
-  <input type="file" id="file" style="display:none">
-  <button onclick="upload()">Upload Season Data</button>
-  <button class="secondary" onclick="exportSeeds()">Export Final Seeds</button>
-</div>
+  <div id="weights" class="card"></div>
 
-<!-- WEIGHTS -->
-<div id="weights" class="card"></div>
-
-<!-- MAIN -->
-<div id="main"></div>
-
-<!-- DETAILS -->
-<div id="details" class="card"></div>
+  <div class="grid">
+    <div id="main"></div>
+    <div id="details" class="card"></div>
+  </div>
 
 </div>
 
 <script>
-
 const API = "https://autoseed-backend.onrender.com";
 
 let data = {};
 let currentWeight = null;
 let lockedSeeds = {};
 let voteInterval = null;
+let currentCompare = null;
 
 // ---------------- UPLOAD
 async function upload(){
-  let f = document.getElementById("file").files[0];
-  let fd = new FormData();
+  const f = document.getElementById("file").files[0];
+  if (!f) {
+    alert("Choose a file first");
+    return;
+  }
+
+  const fd = new FormData();
   fd.append("file", f);
 
-  let res = await fetch(API + "/upload/", { method:"POST", body:fd });
-  data = await res.json();
+  const res = await fetch(API + "/upload/", { method: "POST", body: fd });
+  const json = await res.json();
 
+  if (json.error) {
+    alert(json.error);
+    return;
+  }
+
+  data = json;
   renderWeights();
+  document.getElementById("main").innerHTML = "";
+  document.getElementById("details").innerHTML = `<h3>Meeting Ready</h3><div class="muted">Select a weight to begin.</div>`;
 }
 
 // ---------------- WEIGHTS
 function renderWeights(){
   let html = "<b>Select Weight:</b><br>";
-
-  for(let w in data){
+  for (const w in data) {
     html += `<button onclick="selectWeight('${w}')">${w}</button>`;
   }
-
   document.getElementById("weights").innerHTML = html;
 }
 
@@ -157,106 +244,211 @@ function renderWeights(){
 async function selectWeight(w){
   currentWeight = w;
 
-  await fetch(API + `/session/${w}`, { method:"POST" });
+  await fetch(API + `/session/${w}`, { method: "POST" });
 
-  if(!lockedSeeds[w]){
+  if (!lockedSeeds[w]) {
     lockedSeeds[w] = data[w].seeds.map(s => s[1]);
   }
 
   renderWeight();
+  renderSidebarSummary();
 }
 
-// ---------------- RENDER
+// ---------------- TIER
 function getTier(c){
-  if(c>=85) return "lock";
-  if(c>=65) return "lean";
+  if (c >= 85) return "lock";
+  if (c >= 65) return "lean";
   return "debate";
 }
 
+// ---------------- RENDER WEIGHT
 function renderWeight(){
-  let g = data[currentWeight];
-  let order = lockedSeeds[currentWeight];
+  const g = data[currentWeight];
+  const order = lockedSeeds[currentWeight];
 
-  let html = `<div class="card"><h2>Weight ${currentWeight}</h2>
-  <button onclick="runDebateQueue()">⚠ Debate Queue</button>`;
+  let html = `<div class="card">
+    <h2>Weight ${currentWeight}</h2>
+    <div style="margin-top:10px;">
+      <button onclick="runDebateQueue()">⚠ Debate Queue</button>
+      <button class="dark" onclick="showAutoReview()">Review Flags</button>
+    </div>
+  `;
 
-  order.forEach((name,i)=>{
-    let conf = g.confidence[name] || 0;
-    let tier = getTier(conf);
+  order.forEach((name, i) => {
+    const conf = g.confidence[name] || 0;
+    const tier = getTier(conf);
+    const power = (g.power_scores && g.power_scores[name] !== undefined) ? g.power_scores[name].toFixed(1) : "-";
 
-    html += `<div class="row" onclick="compareIndex(${i})">
-      ${i+1}. ${name}
-      <span class="${tier}">${conf}% | SOS ${g.sos[name]}</span>
-    </div>`;
+    html += `
+      <div class="row" onclick="compareIndex(${i})">
+        <div class="left-col">
+          <div>${i + 1}. ${name}</div>
+          <div class="muted">Power ${power}</div>
+        </div>
+        <div class="right-col">
+          <div class="${tier}">${conf}%</div>
+          <div class="muted">SOS ${g.sos[name]}</div>
+        </div>
+      </div>
+    `;
   });
 
   html += "</div>";
-
   document.getElementById("main").innerHTML = html;
 }
 
-// ---------------- COMPARE
-function compareIndex(i){
-  let order = lockedSeeds[currentWeight];
-  if(i === order.length - 1) return;
+// ---------------- SIDEBAR SUMMARY
+function renderSidebarSummary(){
+  const g = data[currentWeight];
+  let html = `<h3>Weight ${currentWeight} Summary</h3>`;
 
-  runCompare(order[i], order[i+1]);
+  if (g.controversy_flags?.length) {
+    html += `<div class="alert"><b>Controversy Flags</b><br>${g.controversy_flags.join("<br>")}</div>`;
+  }
+
+  if (g.upset_alerts?.length) {
+    html += `<div class="good"><b>Upset Alerts</b><br>${g.upset_alerts.join("<br>")}</div>`;
+  }
+
+  html += `<div class="muted">Select adjacent seeds to compare, vote, and finalize.</div>`;
+
+  document.getElementById("details").innerHTML = html;
 }
 
-// ---------------- DECISION ENGINE
-async function runCompare(a,b){
+// ---------------- COMPARE INDEX
+function compareIndex(i){
+  const order = lockedSeeds[currentWeight];
+  if (i === order.length - 1) return;
+  runCompare(order[i], order[i + 1]);
+}
 
-  await fetch(API + `/session/${currentWeight}`, { method:"POST" });
+// ---------------- RUN COMPARE
+async function runCompare(a, b){
+  currentCompare = { a, b };
 
-  let g = data[currentWeight];
-  let h = g.history;
-  let common = g.common[a][b];
+  await fetch(API + `/session/${currentWeight}/matchup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ a, b })
+  });
 
-  let topA = g.top_wins[a] || [];
-  let topB = g.top_wins[b] || [];
-  let badA = g.bad_losses[a] || [];
-  let badB = g.bad_losses[b] || [];
+  const g = data[currentWeight];
+  const h = g.history;
+  const common = g.common[a][b] || [];
+
+  const topA = g.top_wins[a] || [];
+  const topB = g.top_wins[b] || [];
+  const badA = g.bad_losses[a] || [];
+  const badB = g.bad_losses[b] || [];
 
   let adv = 0;
   let reasons = [];
+  let breakdown = {
+    head: 0,
+    record: 0,
+    common: 0,
+    sos: 0,
+    top: 0,
+    bad: 0
+  };
 
-  if(h[a].wins.includes(b)){ adv+=5; reasons.push(`${a} beat ${b}`); }
-  else if(h[b].wins.includes(a)){ adv-=5; reasons.push(`${b} beat ${a}`); }
+  // head-to-head
+  if (h[a].wins.includes(b)) {
+    adv += 5;
+    breakdown.head = 5;
+    reasons.push(`${a} beat ${b}`);
+  } else if (h[b].wins.includes(a)) {
+    adv -= 5;
+    breakdown.head = -5;
+    reasons.push(`${b} beat ${a}`);
+  }
 
-  let r1 = h[a].wins.length - h[a].losses.length;
-  let r2 = h[b].wins.length - h[b].losses.length;
+  // record
+  const r1 = h[a].wins.length - h[a].losses.length;
+  const r2 = h[b].wins.length - h[b].losses.length;
+  if (r1 > r2) {
+    adv += 2;
+    breakdown.record = 2;
+    reasons.push(`${a} better record`);
+  } else if (r2 > r1) {
+    adv -= 2;
+    breakdown.record = -2;
+    reasons.push(`${b} better record`);
+  }
 
-  if(r1>r2){ adv+=2; reasons.push(`${a} better record`); }
-  else if(r2>r1){ adv-=2; reasons.push(`${b} better record`); }
-
-  common.forEach(c=>{
-    if(c.w1==="W" && c.w2==="L"){
-      adv+=2;
+  // common opponents
+  common.forEach(c => {
+    if (c.w1 === "W" && c.w2 === "L") {
+      adv += 2;
+      breakdown.common += 2;
       reasons.push(`${a} better vs ${c.opponent}`);
     }
-    if(c.w2==="W" && c.w1==="L"){
-      adv-=2;
+    if (c.w2 === "W" && c.w1 === "L") {
+      adv -= 2;
+      breakdown.common -= 2;
       reasons.push(`${b} better vs ${c.opponent}`);
     }
   });
 
-  let diff = g.sos[a] - g.sos[b];
-  if(diff>0){ adv+=1; reasons.push(`${a} stronger schedule`); }
-  if(diff<0){ adv-=1; reasons.push(`${b} stronger schedule`); }
+  // sos
+  const diff = g.sos[a] - g.sos[b];
+  if (diff > 0) {
+    adv += 1;
+    breakdown.sos = 1;
+    reasons.push(`${a} stronger schedule`);
+  }
+  if (diff < 0) {
+    adv -= 1;
+    breakdown.sos = -1;
+    reasons.push(`${b} stronger schedule`);
+  }
 
-  // QUALITY IMPACT
-  adv += (topA.length - topB.length);
-  adv -= (badA.length - badB.length);
+  // top wins
+  if (topA.length > topB.length) {
+    adv += 1;
+    breakdown.top = 1;
+    reasons.push(`${a} more top wins`);
+  } else if (topB.length > topA.length) {
+    adv -= 1;
+    breakdown.top = -1;
+    reasons.push(`${b} more top wins`);
+  }
 
-  let winner = adv>0 ? a : adv<0 ? b : "Too close";
+  // bad losses
+  if (badA.length < badB.length) {
+    adv += 1;
+    breakdown.bad = 1;
+    reasons.push(`${a} fewer bad losses`);
+  } else if (badB.length < badA.length) {
+    adv -= 1;
+    breakdown.bad = -1;
+    reasons.push(`${b} fewer bad losses`);
+  }
+
+  const winner = adv > 0 ? a : adv < 0 ? b : "Too close";
 
   document.getElementById("details").innerHTML = `
     <h2>${a} vs ${b}</h2>
 
-    ${a}: ${h[a].wins.length}-${h[a].losses.length}<br>
-    ${b}: ${h[b].wins.length}-${h[b].losses.length}<br><br>
+    <div class="badge">${a}: ${h[a].wins.length}-${h[a].losses.length}</div>
+    <div class="badge">${b}: ${h[b].wins.length}-${h[b].losses.length}</div>
+    <div class="badge">SOS ${a}: ${g.sos[a]}</div>
+    <div class="badge">SOS ${b}: ${g.sos[b]}</div>
 
-    <b>Key Factors:</b><br>${reasons.join("<br>")}
+    <hr>
+
+    <b>Key Factors</b><br>
+    ${reasons.length ? reasons.join("<br>") : "No strong separator found"}
+
+    <hr>
+
+    <b>Why Score</b><br>
+    Head-to-head: ${breakdown.head}<br>
+    Record: ${breakdown.record}<br>
+    Common opponents: ${breakdown.common}<br>
+    SOS: ${breakdown.sos}<br>
+    Top wins: ${breakdown.top}<br>
+    Bad losses: ${breakdown.bad}<br>
 
     <hr>
 
@@ -268,11 +460,23 @@ async function runCompare(a,b){
     ${a}: ${badA.join(", ") || "None"}<br>
     ${b}: ${badB.join(", ") || "None"}<br>
 
+    <hr>
+
+    <b>Common Opponents</b><br>
+    ${common.length ? common.map(c => `${c.opponent}: ${a}(${c.w1}) vs ${b}(${c.w2})`).join("<br>") : "None"}
+
     <div class="big">🏆 Recommended: ${winner}</div>
+
+    <div class="input-row">
+      <input type="text" id="voterName" placeholder="Coach name">
+      <select id="voterRole">
+        <option value="coach">Coach</option>
+        <option value="head_coach">Head Coach</option>
+      </select>
+    </div>
 
     <button onclick="vote('${a}')">Vote ${a}</button>
     <button onclick="vote('${b}')">Vote ${b}</button>
-
     <div id="votes"></div>
 
     <button class="secondary" onclick="swap('${a}','${b}')">Swap Seeds</button>
@@ -283,77 +487,150 @@ async function runCompare(a,b){
 
 // ---------------- VOTE
 async function vote(name){
+  const voter = document.getElementById("voterName")?.value?.trim() || "Anonymous";
+  const role = document.getElementById("voterRole")?.value || "coach";
+
   await fetch(API + `/vote/${currentWeight}`, {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ name })
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ name, voter, role })
   });
 }
 
-// ---------------- POLL
+// ---------------- POLL VOTES
 function pollVotes(){
-  if(voteInterval) clearInterval(voteInterval);
+  if (voteInterval) clearInterval(voteInterval);
 
-  voteInterval = setInterval(async ()=>{
-    let res = await fetch(API + `/votes/${currentWeight}`);
-    let v = await res.json();
+  voteInterval = setInterval(async () => {
+    const res = await fetch(API + `/votes/${currentWeight}`);
+    const v = await res.json();
 
-    let html = "<b>Live Votes:</b><br>";
-    for(let k in v.votes){
+    let html = "<b>Live Votes</b><br>";
+    for (const k in v.votes) {
       html += `${k}: ${v.votes[k]}<br>`;
     }
 
-    document.getElementById("votes").innerHTML = html;
-  },2000);
+    if (v.voters && Object.keys(v.voters).length) {
+      html += "<br><b>Voters</b><br>";
+      for (const voter in v.voters) {
+        const info = v.voters[voter];
+        html += `${voter} → ${info.name} (${info.role})<br>`;
+      }
+    }
+
+    const voteBox = document.getElementById("votes");
+    if (voteBox) voteBox.innerHTML = html;
+  }, 2000);
 }
 
 // ---------------- SWAP
-function swap(a,b){
-  let arr = lockedSeeds[currentWeight];
-  let i = arr.indexOf(a);
-  let j = arr.indexOf(b);
+function swap(a, b){
+  const arr = lockedSeeds[currentWeight];
+  const i = arr.indexOf(a);
+  const j = arr.indexOf(b);
   [arr[i], arr[j]] = [arr[j], arr[i]];
   renderWeight();
 }
 
 // ---------------- DEBATE QUEUE
 function runDebateQueue(){
-  let g = data[currentWeight];
-  let order = lockedSeeds[currentWeight];
+  const g = data[currentWeight];
+  const q = g.debate_queue || [];
 
-  for(let i=0;i<order.length-1;i++){
-    let a=order[i];
-    let b=order[i+1];
-
-    let diff = Math.abs((g.confidence[a]||0)-(g.confidence[b]||0));
-
-    if(diff<8){
-      runCompare(a,b);
-      return;
-    }
+  if (!q.length) {
+    alert("No major debates");
+    return;
   }
 
-  alert("No major debates");
+  const first = q[0];
+  runCompare(first.higher, first.lower);
 }
 
-// ---------------- EXPORT
+// ---------------- REVIEW FLAGS
+function showAutoReview(){
+  const g = data[currentWeight];
+
+  let html = `<h3>Weight ${currentWeight} Review</h3>`;
+
+  if (g.controversy_flags?.length) {
+    html += `<div class="alert"><b>Controversy Flags</b><br>${g.controversy_flags.join("<br>")}</div>`;
+  }
+
+  if (g.upset_alerts?.length) {
+    html += `<div class="good"><b>Upset Alerts</b><br>${g.upset_alerts.join("<br>")}</div>`;
+  }
+
+  if (g.debate_queue?.length) {
+    html += `<b>Debate Queue</b><br>`;
+    html += g.debate_queue.map(x => `${x.higher} vs ${x.lower} — ${x.reason}`).join("<br>");
+  }
+
+  document.getElementById("details").innerHTML = html;
+}
+
+// ---------------- EXPORT SEEDS
 function exportSeeds(){
-  let order = lockedSeeds[currentWeight];
+  if (!currentWeight) {
+    alert("Select a weight first");
+    return;
+  }
 
-  let rows = ["Seed,Wrestler"];
-  order.forEach((w,i)=>{
-    rows.push(`${i+1},${w}`);
-  });
+  const order = lockedSeeds[currentWeight];
+  const rows = ["Seed,Wrestler"];
+  order.forEach((w, i) => rows.push(`${i+1},${w}`));
 
-  let blob = new Blob([rows.join("\n")], {type:"text/csv"});
-  let url = URL.createObjectURL(blob);
+  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
 
-  let a = document.createElement("a");
+  const a = document.createElement("a");
   a.href = url;
-  a.download = "final_seeds.csv";
+  a.download = `final_seeds_${currentWeight}.csv`;
   a.click();
 }
 
+// ---------------- EXPORT REPORT
+function exportMeetingReport(){
+  if (!currentWeight) {
+    alert("Select a weight first");
+    return;
+  }
+
+  const g = data[currentWeight];
+  const order = lockedSeeds[currentWeight];
+
+  let rows = [
+    "Weight,Seed,Wrestler,Confidence,SOS,TopWins,BadLosses,PowerScore"
+  ];
+
+  order.forEach((name, i) => {
+    rows.push([
+      currentWeight,
+      i + 1,
+      name,
+      g.confidence[name] || "",
+      g.sos[name] || "",
+      `"${(g.top_wins[name] || []).join("; ")}"`,
+      `"${(g.bad_losses[name] || []).join("; ")}"`,
+      g.power_scores[name] || ""
+    ].join(","));
+  });
+
+  rows.push("");
+  rows.push("Controversy Flags");
+  (g.controversy_flags || []).forEach(x => rows.push(`"${x}"`));
+
+  rows.push("");
+  rows.push("Upset Alerts");
+  (g.upset_alerts || []).forEach(x => rows.push(`"${x}"`));
+
+  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `meeting_report_${currentWeight}.csv`;
+  a.click();
+}
 </script>
 
 </body>
