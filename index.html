@@ -1112,108 +1112,705 @@ function handleDrop(e) {
 }
 
 // ── DEMO DATA ──
+// Hand-crafted late-season tournament data. Each weight class has 8 wrestlers
+// with 10-15 matches each, realistic win methods, common opponents, and the
+// messy contradictions (upsets, split common opponents) that make seeding hard.
 function loadDemo() {
-  // Build a realistic demo dataset
-  const weights = ['132', '138', '145', '152', '160', '170', '182', '195', '220', '285'];
-  const demoNames = {
-    '132': ['Reynolds, C', 'Martinez, D', 'Thompson, K', 'Walsh, B', 'Nguyen, P', 'Chen, R', 'Brooks, J', 'Fisher, T'],
-    '138': ['Callahan, M', 'Soto, E', 'Patterson, L', 'Dunn, W', 'Pearce, A', 'Gray, S', 'Morris, C', 'Burke, J'],
-    '145': ['Henderson, T', 'Rivera, M', 'Collins, B', 'Sanders, G', 'Price, D', 'Wood, F', 'Barnes, A', 'Cook, P'],
-    '152': ['Powell, H', 'Hughes, N', 'Flores, J', 'Washington, D', 'Butler, K', 'Simmons, R', 'Foster, T', 'Gonzalez, L'],
-    '160': ['Bryant, C', 'Alexander, M', 'Russell, B', 'Griffin, J', 'Diaz, E', 'Hayes, W', 'Myers, T', 'Ford, S'],
-    '170': ['Hamilton, A', 'Graham, B', 'Sullivan, C', 'Wallace, D', 'Woods, E', 'Cole, F', 'West, G', 'Jordan, H'],
-    '182': ['Owen, A', 'Reynolds, B', 'Fisher, C', 'Ellis, D', 'Harrison, E', 'Gibson, F', 'McDonald, G', 'Cruz, H'],
-    '195': ['Marshall, A', 'Ortiz, B', 'Gomez, C', 'Murray, D', 'Freeman, E', 'Wells, F', 'Webb, G', 'Stevens, H'],
-    '220': ['Tucker, A', 'Porter, B', 'Hunter, C', 'Hicks, D', 'Crawford, E', 'Henry, F', 'Mendoza, G', 'Boyd, H'],
-    '285': ['Warren, A', 'Ferguson, B', 'Robertson, C', 'Ross, D', 'Morales, E', 'Spencer, F', 'Perry, G', 'Long, H'],
+
+  // Win method point values — mirrors the backend exactly
+  const METHOD_PTS = { fall:6, tf:5, md:4, dec:3 };
+
+  // Raw match logs per weight class.
+  // Format: [wrestlerA, wrestlerB, winner, method]
+  // method: 'fall' | 'tf' | 'md' | 'dec'
+  const RAW_MATCHES = {
+
+    '132': [
+      // Castillo is the clear #1 — pins and tech falls, beat everyone near him
+      ['Castillo, R',  'Nguyen, P',    'Castillo, R',  'fall'],
+      ['Castillo, R',  'Delgado, M',   'Castillo, R',  'tf'  ],
+      ['Castillo, R',  'Okafor, J',    'Castillo, R',  'tf'  ],
+      ['Castillo, R',  'Patel, S',     'Castillo, R',  'md'  ],
+      ['Castillo, R',  'Jennings, B',  'Castillo, R',  'fall'],
+      ['Castillo, R',  'Huang, L',     'Castillo, R',  'md'  ],
+      ['Castillo, R',  'Vance, T',     'Castillo, R',  'dec' ],
+      // Nguyen #2 — good record, mostly decisions, one bad loss to Okafor
+      ['Nguyen, P',    'Delgado, M',   'Nguyen, P',    'md'  ],
+      ['Nguyen, P',    'Patel, S',     'Nguyen, P',    'dec' ],
+      ['Nguyen, P',    'Jennings, B',  'Nguyen, P',    'dec' ],
+      ['Nguyen, P',    'Huang, L',     'Nguyen, P',    'dec' ],
+      ['Nguyen, P',    'Vance, T',     'Nguyen, P',    'md'  ],
+      ['Nguyen, P',    'Okafor, J',    'Okafor, J',    'dec' ],  // bad loss for Nguyen
+      // Delgado #3 — strong pins but lost to Okafor too; creates controversy
+      ['Delgado, M',   'Patel, S',     'Delgado, M',   'fall'],
+      ['Delgado, M',   'Jennings, B',  'Delgado, M',   'tf'  ],
+      ['Delgado, M',   'Huang, L',     'Delgado, M',   'md'  ],
+      ['Delgado, M',   'Vance, T',     'Delgado, M',   'dec' ],
+      ['Delgado, M',   'Okafor, J',    'Okafor, J',    'md'  ],  // Okafor beats Delgado too
+      // Okafor #4 — upset artist, beat Nguyen and Delgado but lost to Patel (bad loss)
+      ['Okafor, J',    'Jennings, B',  'Okafor, J',    'fall'],
+      ['Okafor, J',    'Huang, L',     'Okafor, J',    'dec' ],
+      ['Okafor, J',    'Vance, T',     'Okafor, J',    'tf'  ],
+      ['Okafor, J',    'Patel, S',     'Patel, S',     'dec' ],  // bad loss for Okafor
+      // Patel #5 — solid mid-tier, beat Okafor, close losses to top 3
+      ['Patel, S',     'Jennings, B',  'Patel, S',     'md'  ],
+      ['Patel, S',     'Huang, L',     'Patel, S',     'dec' ],
+      ['Patel, S',     'Vance, T',     'Patel, S',     'dec' ],
+      // Jennings #6 — loses to top 5 but beats bottom 2 convincingly
+      ['Jennings, B',  'Huang, L',     'Jennings, B',  'tf'  ],
+      ['Jennings, B',  'Vance, T',     'Jennings, B',  'fall'],
+      // Huang #7 — beat Vance, lost to everyone else
+      ['Huang, L',     'Vance, T',     'Huang, L',     'dec' ],
+      // Common opponents from out-of-field matches (non-field wrestlers)
+      ['Castillo, R',  'Rivera, A',    'Castillo, R',  'fall'],
+      ['Nguyen, P',    'Rivera, A',    'Nguyen, P',    'md'  ],
+      ['Delgado, M',   'Rivera, A',    'Delgado, M',   'dec' ],
+      ['Okafor, J',    'Rivera, A',    'Okafor, J',    'tf'  ],
+      ['Castillo, R',  'Stone, W',     'Castillo, R',  'tf'  ],
+      ['Nguyen, P',    'Stone, W',     'Nguyen, P',    'dec' ],
+      ['Delgado, M',   'Stone, W',     'Stone, W',     'dec' ],  // Delgado lost to Stone
+      ['Patel, S',     'Stone, W',     'Patel, S',     'md'  ],
+      ['Okafor, J',    'Stone, W',     'Okafor, J',    'dec' ],
+      ['Nguyen, P',    'Torres, K',    'Torres, K',    'dec' ],  // Nguyen lost to Torres
+      ['Delgado, M',   'Torres, K',    'Delgado, M',   'tf'  ],
+      ['Okafor, J',    'Torres, K',    'Okafor, J',    'fall'],
+      ['Patel, S',     'Torres, K',    'Patel, S',     'dec' ],
+    ],
+
+    '138': [
+      // Harmon is dominant — fall machine
+      ['Harmon, D',    'Kowalski, T',  'Harmon, D',    'fall'],
+      ['Harmon, D',    'Espinoza, L',  'Harmon, D',    'fall'],
+      ['Harmon, D',    'Mintz, J',     'Harmon, D',    'tf'  ],
+      ['Harmon, D',    'Gibbs, R',     'Harmon, D',    'md'  ],
+      ['Harmon, D',    'Yates, C',     'Harmon, D',    'fall'],
+      ['Harmon, D',    'Polk, A',      'Harmon, D',    'tf'  ],
+      ['Harmon, D',    'Keane, S',     'Harmon, D',    'dec' ],
+      // Kowalski #2 — all decisions, very tough schedule
+      ['Kowalski, T',  'Espinoza, L',  'Kowalski, T',  'dec' ],
+      ['Kowalski, T',  'Mintz, J',     'Kowalski, T',  'dec' ],
+      ['Kowalski, T',  'Gibbs, R',     'Kowalski, T',  'md'  ],
+      ['Kowalski, T',  'Yates, C',     'Kowalski, T',  'dec' ],
+      ['Kowalski, T',  'Polk, A',      'Kowalski, T',  'dec' ],
+      ['Kowalski, T',  'Keane, S',     'Kowalski, T',  'dec' ],
+      // Espinoza #3 — good wins, lost to Mintz once (controversy)
+      ['Espinoza, L',  'Gibbs, R',     'Espinoza, L',  'fall'],
+      ['Espinoza, L',  'Yates, C',     'Espinoza, L',  'tf'  ],
+      ['Espinoza, L',  'Polk, A',      'Espinoza, L',  'md'  ],
+      ['Espinoza, L',  'Keane, S',     'Espinoza, L',  'dec' ],
+      ['Espinoza, L',  'Mintz, J',     'Mintz, J',     'dec' ],  // controversy
+      // Mintz #4 — beat Espinoza, close losses elsewhere
+      ['Mintz, J',     'Gibbs, R',     'Mintz, J',     'md'  ],
+      ['Mintz, J',     'Yates, C',     'Mintz, J',     'dec' ],
+      ['Mintz, J',     'Polk, A',      'Mintz, J',     'dec' ],
+      ['Mintz, J',     'Keane, S',     'Keane, S',     'dec' ],  // Mintz lost to Keane
+      // Gibbs #5
+      ['Gibbs, R',     'Yates, C',     'Gibbs, R',     'dec' ],
+      ['Gibbs, R',     'Polk, A',      'Gibbs, R',     'dec' ],
+      ['Gibbs, R',     'Keane, S',     'Gibbs, R',     'md'  ],
+      // Yates #6
+      ['Yates, C',     'Polk, A',      'Yates, C',     'dec' ],
+      ['Yates, C',     'Keane, S',     'Keane, S',     'tf'  ],  // Keane upset
+      // Polk #7
+      ['Polk, A',      'Keane, S',     'Polk, A',      'dec' ],
+      // Common opponents
+      ['Harmon, D',    'Odom, F',      'Harmon, D',    'fall'],
+      ['Kowalski, T',  'Odom, F',      'Kowalski, T',  'dec' ],
+      ['Espinoza, L',  'Odom, F',      'Espinoza, L',  'tf'  ],
+      ['Mintz, J',     'Odom, F',      'Odom, F',      'dec' ],
+      ['Harmon, D',    'Beckett, W',   'Harmon, D',    'tf'  ],
+      ['Kowalski, T',  'Beckett, W',   'Beckett, W',   'dec' ],  // Kowalski lost to Beckett
+      ['Espinoza, L',  'Beckett, W',   'Espinoza, L',  'dec' ],
+      ['Mintz, J',     'Beckett, W',   'Mintz, J',     'md'  ],
+      ['Gibbs, R',     'Beckett, W',   'Beckett, W',   'dec' ],
+    ],
+
+    '145': [
+      // Tran is dominant pinner
+      ['Tran, V',      'Holloway, K',  'Tran, V',      'fall'],
+      ['Tran, V',      'Brandt, E',    'Tran, V',      'fall'],
+      ['Tran, V',      'Solis, M',     'Tran, V',      'tf'  ],
+      ['Tran, V',      'Carmichael, D','Tran, V',      'md'  ],
+      ['Tran, V',      'Petrov, A',    'Tran, V',      'fall'],
+      ['Tran, V',      'Kimura, T',    'Tran, V',      'tf'  ],
+      ['Tran, V',      'Walton, B',    'Tran, V',      'dec' ],
+      // Holloway #2 — strong but all decisions, tough schedule
+      ['Holloway, K',  'Brandt, E',    'Holloway, K',  'dec' ],
+      ['Holloway, K',  'Solis, M',     'Holloway, K',  'md'  ],
+      ['Holloway, K',  'Carmichael, D','Holloway, K',  'dec' ],
+      ['Holloway, K',  'Petrov, A',    'Holloway, K',  'dec' ],
+      ['Holloway, K',  'Kimura, T',    'Holloway, K',  'dec' ],
+      ['Holloway, K',  'Walton, B',    'Walton, B',    'dec' ],  // upset alert
+      // Brandt — pins lower guys, lost to Solis once (debate 2v3)
+      ['Brandt, E',    'Solis, M',     'Solis, M',     'dec' ],  // controversy
+      ['Brandt, E',    'Carmichael, D','Brandt, E',    'fall'],
+      ['Brandt, E',    'Petrov, A',    'Brandt, E',    'tf'  ],
+      ['Brandt, E',    'Kimura, T',    'Brandt, E',    'md'  ],
+      ['Brandt, E',    'Walton, B',    'Brandt, E',    'dec' ],
+      // Solis #3 — beat Brandt, lost to Carmichael (messy middle)
+      ['Solis, M',     'Carmichael, D','Carmichael, D','dec' ],
+      ['Solis, M',     'Petrov, A',    'Solis, M',     'dec' ],
+      ['Solis, M',     'Kimura, T',    'Solis, M',     'md'  ],
+      ['Solis, M',     'Walton, B',    'Solis, M',     'dec' ],
+      // Carmichael #4
+      ['Carmichael, D','Petrov, A',    'Carmichael, D','md'  ],
+      ['Carmichael, D','Kimura, T',    'Carmichael, D','dec' ],
+      ['Carmichael, D','Walton, B',    'Carmichael, D','dec' ],
+      // Petrov #5
+      ['Petrov, A',    'Kimura, T',    'Petrov, A',    'dec' ],
+      ['Petrov, A',    'Walton, B',    'Petrov, A',    'md'  ],
+      // Kimura #6 — beat Walton, has upset potential
+      ['Kimura, T',    'Walton, B',    'Kimura, T',    'tf'  ],
+      // Common opponents
+      ['Tran, V',      'Dumas, C',     'Tran, V',      'fall'],
+      ['Holloway, K',  'Dumas, C',     'Holloway, K',  'dec' ],
+      ['Brandt, E',    'Dumas, C',     'Brandt, E',    'md'  ],
+      ['Solis, M',     'Dumas, C',     'Dumas, C',     'dec' ],  // Solis bad loss
+      ['Tran, V',      'Navarro, P',   'Tran, V',      'tf'  ],
+      ['Holloway, K',  'Navarro, P',   'Navarro, P',   'dec' ],  // Holloway bad loss
+      ['Brandt, E',    'Navarro, P',   'Brandt, E',    'dec' ],
+      ['Carmichael, D','Navarro, P',   'Carmichael, D','md'  ],
+      ['Solis, M',     'Navarro, P',   'Solis, M',     'dec' ],
+    ],
+
+    '152': [
+      ['Chambers, W',  'Ruiz, F',      'Chambers, W',  'fall'],
+      ['Chambers, W',  'Novak, B',     'Chambers, W',  'tf'  ],
+      ['Chambers, W',  'Ihejirika, C', 'Chambers, W',  'fall'],
+      ['Chambers, W',  'Lund, A',      'Chambers, W',  'md'  ],
+      ['Chambers, W',  'Payne, D',     'Chambers, W',  'tf'  ],
+      ['Chambers, W',  'Stein, R',     'Chambers, W',  'dec' ],
+      ['Chambers, W',  'Ogden, T',     'Chambers, W',  'dec' ],
+      ['Ruiz, F',      'Novak, B',     'Ruiz, F',      'md'  ],
+      ['Ruiz, F',      'Ihejirika, C', 'Ruiz, F',      'dec' ],
+      ['Ruiz, F',      'Lund, A',      'Ruiz, F',      'dec' ],
+      ['Ruiz, F',      'Payne, D',     'Ruiz, F',      'dec' ],
+      ['Ruiz, F',      'Stein, R',     'Ruiz, F',      'md'  ],
+      ['Ruiz, F',      'Ogden, T',     'Ogden, T',     'dec' ],  // bad loss Ruiz
+      ['Novak, B',     'Ihejirika, C', 'Ihejirika, C', 'dec' ],  // controversy 3v4
+      ['Novak, B',     'Lund, A',      'Novak, B',     'fall'],
+      ['Novak, B',     'Payne, D',     'Novak, B',     'tf'  ],
+      ['Novak, B',     'Stein, R',     'Novak, B',     'dec' ],
+      ['Novak, B',     'Ogden, T',     'Novak, B',     'dec' ],
+      ['Ihejirika, C', 'Lund, A',      'Ihejirika, C', 'md'  ],
+      ['Ihejirika, C', 'Payne, D',     'Ihejirika, C', 'dec' ],
+      ['Ihejirika, C', 'Stein, R',     'Stein, R',     'dec' ],  // upset
+      ['Ihejirika, C', 'Ogden, T',     'Ihejirika, C', 'dec' ],
+      ['Lund, A',      'Payne, D',     'Lund, A',      'dec' ],
+      ['Lund, A',      'Stein, R',     'Stein, R',     'md'  ],  // Lund bad loss
+      ['Lund, A',      'Ogden, T',     'Lund, A',      'dec' ],
+      ['Payne, D',     'Stein, R',     'Payne, D',     'dec' ],
+      ['Payne, D',     'Ogden, T',     'Payne, D',     'dec' ],
+      ['Stein, R',     'Ogden, T',     'Stein, R',     'tf'  ],
+      // Common opponents
+      ['Chambers, W',  'Cross, L',     'Chambers, W',  'fall'],
+      ['Ruiz, F',      'Cross, L',     'Ruiz, F',      'dec' ],
+      ['Novak, B',     'Cross, L',     'Novak, B',     'md'  ],
+      ['Ihejirika, C', 'Cross, L',     'Cross, L',     'dec' ],
+      ['Chambers, W',  'Finley, G',    'Chambers, W',  'tf'  ],
+      ['Ruiz, F',      'Finley, G',    'Ruiz, F',      'dec' ],
+      ['Novak, B',     'Finley, G',    'Finley, G',    'dec' ],
+      ['Ihejirika, C', 'Finley, G',    'Ihejirika, C', 'dec' ],
+      ['Lund, A',      'Finley, G',    'Lund, A',      'md'  ],
+    ],
+
+    '160': [
+      ['Morrow, K',    'Batista, E',   'Morrow, K',    'fall'],
+      ['Morrow, K',    'Larkin, S',    'Morrow, K',    'tf'  ],
+      ['Morrow, K',    'Deacon, T',    'Morrow, K',    'fall'],
+      ['Morrow, K',    'Rhee, J',      'Morrow, K',    'md'  ],
+      ['Morrow, K',    'Byrd, C',      'Morrow, K',    'fall'],
+      ['Morrow, K',    'Fenn, A',      'Morrow, K',    'dec' ],
+      ['Morrow, K',    'Ingram, P',    'Morrow, K',    'md'  ],
+      ['Batista, E',   'Larkin, S',    'Batista, E',   'dec' ],
+      ['Batista, E',   'Deacon, T',    'Batista, E',   'md'  ],
+      ['Batista, E',   'Rhee, J',      'Rhee, J',      'dec' ],  // controversy
+      ['Batista, E',   'Byrd, C',      'Batista, E',   'dec' ],
+      ['Batista, E',   'Fenn, A',      'Batista, E',   'dec' ],
+      ['Batista, E',   'Ingram, P',    'Batista, E',   'dec' ],
+      ['Larkin, S',    'Deacon, T',    'Deacon, T',    'dec' ],  // controversy 3v4
+      ['Larkin, S',    'Rhee, J',      'Larkin, S',    'md'  ],
+      ['Larkin, S',    'Byrd, C',      'Larkin, S',    'dec' ],
+      ['Larkin, S',    'Fenn, A',      'Larkin, S',    'dec' ],
+      ['Larkin, S',    'Ingram, P',    'Larkin, S',    'dec' ],
+      ['Deacon, T',    'Rhee, J',      'Deacon, T',    'dec' ],
+      ['Deacon, T',    'Byrd, C',      'Deacon, T',    'tf'  ],
+      ['Deacon, T',    'Fenn, A',      'Deacon, T',    'dec' ],
+      ['Deacon, T',    'Ingram, P',    'Ingram, P',    'dec' ],  // Deacon upset
+      ['Rhee, J',      'Byrd, C',      'Rhee, J',      'fall'],
+      ['Rhee, J',      'Fenn, A',      'Rhee, J',      'dec' ],
+      ['Rhee, J',      'Ingram, P',    'Rhee, J',      'md'  ],
+      ['Byrd, C',      'Fenn, A',      'Byrd, C',      'dec' ],
+      ['Byrd, C',      'Ingram, P',    'Ingram, P',    'tf'  ],  // Ingram upsets Byrd
+      ['Fenn, A',      'Ingram, P',    'Fenn, A',      'dec' ],
+      ['Morrow, K',    'Yuen, H',      'Morrow, K',    'fall'],
+      ['Batista, E',   'Yuen, H',      'Batista, E',   'dec' ],
+      ['Larkin, S',    'Yuen, H',      'Larkin, S',    'dec' ],
+      ['Deacon, T',    'Yuen, H',      'Yuen, H',      'dec' ],
+      ['Rhee, J',      'Yuen, H',      'Rhee, J',      'md'  ],
+    ],
+
+    '170': [
+      ['Petersen, G',  'Okello, D',    'Petersen, G',  'fall'],
+      ['Petersen, G',  'Reyes, M',     'Petersen, G',  'tf'  ],
+      ['Petersen, G',  'Shapiro, B',   'Petersen, G',  'md'  ],
+      ['Petersen, G',  'Dinh, Q',      'Petersen, G',  'fall'],
+      ['Petersen, G',  'Crane, W',     'Petersen, G',  'dec' ],
+      ['Petersen, G',  'Ibarra, J',    'Petersen, G',  'md'  ],
+      ['Petersen, G',  'Moss, T',      'Petersen, G',  'dec' ],
+      ['Okello, D',    'Reyes, M',     'Reyes, M',     'dec' ],  // controversy 2v3
+      ['Okello, D',    'Shapiro, B',   'Okello, D',    'dec' ],
+      ['Okello, D',    'Dinh, Q',      'Okello, D',    'md'  ],
+      ['Okello, D',    'Crane, W',     'Okello, D',    'dec' ],
+      ['Okello, D',    'Ibarra, J',    'Okello, D',    'dec' ],
+      ['Okello, D',    'Moss, T',      'Okello, D',    'dec' ],
+      ['Reyes, M',     'Shapiro, B',   'Reyes, M',     'md'  ],
+      ['Reyes, M',     'Dinh, Q',      'Reyes, M',     'dec' ],
+      ['Reyes, M',     'Crane, W',     'Reyes, M',     'dec' ],
+      ['Reyes, M',     'Ibarra, J',    'Reyes, M',     'dec' ],
+      ['Reyes, M',     'Moss, T',      'Moss, T',      'dec' ],  // Reyes bad loss
+      ['Shapiro, B',   'Dinh, Q',      'Shapiro, B',   'dec' ],
+      ['Shapiro, B',   'Crane, W',     'Crane, W',     'dec' ],
+      ['Shapiro, B',   'Ibarra, J',    'Shapiro, B',   'dec' ],
+      ['Shapiro, B',   'Moss, T',      'Shapiro, B',   'md'  ],
+      ['Dinh, Q',      'Crane, W',     'Dinh, Q',      'dec' ],
+      ['Dinh, Q',      'Ibarra, J',    'Ibarra, J',    'tf'  ],
+      ['Dinh, Q',      'Moss, T',      'Dinh, Q',      'dec' ],
+      ['Crane, W',     'Ibarra, J',    'Crane, W',     'dec' ],
+      ['Crane, W',     'Moss, T',      'Crane, W',     'md'  ],
+      ['Ibarra, J',    'Moss, T',      'Ibarra, J',    'dec' ],
+      ['Petersen, G',  'Lowe, R',      'Petersen, G',  'fall'],
+      ['Okello, D',    'Lowe, R',      'Okello, D',    'dec' ],
+      ['Reyes, M',     'Lowe, R',      'Reyes, M',     'md'  ],
+      ['Shapiro, B',   'Lowe, R',      'Lowe, R',      'dec' ],
+      ['Dinh, Q',      'Lowe, R',      'Dinh, Q',      'dec' ],
+    ],
+
+    '182': [
+      ['Albright, J',  'Suarez, C',    'Albright, J',  'fall'],
+      ['Albright, J',  'Nwachukwu, E', 'Albright, J',  'tf'  ],
+      ['Albright, J',  'Holt, B',      'Albright, J',  'fall'],
+      ['Albright, J',  'Yamamoto, K',  'Albright, J',  'md'  ],
+      ['Albright, J',  'Pearce, G',    'Albright, J',  'dec' ],
+      ['Albright, J',  'Draper, T',    'Albright, J',  'dec' ],
+      ['Albright, J',  'Voss, M',      'Albright, J',  'fall'],
+      ['Suarez, C',    'Nwachukwu, E', 'Suarez, C',    'dec' ],
+      ['Suarez, C',    'Holt, B',      'Suarez, C',    'md'  ],
+      ['Suarez, C',    'Yamamoto, K',  'Yamamoto, K',  'dec' ],  // controversy
+      ['Suarez, C',    'Pearce, G',    'Suarez, C',    'dec' ],
+      ['Suarez, C',    'Draper, T',    'Suarez, C',    'dec' ],
+      ['Suarez, C',    'Voss, M',      'Suarez, C',    'dec' ],
+      ['Nwachukwu, E', 'Holt, B',      'Nwachukwu, E', 'tf'  ],
+      ['Nwachukwu, E', 'Yamamoto, K',  'Nwachukwu, E', 'dec' ],
+      ['Nwachukwu, E', 'Pearce, G',    'Nwachukwu, E', 'dec' ],
+      ['Nwachukwu, E', 'Draper, T',    'Draper, T',    'dec' ],  // upset
+      ['Nwachukwu, E', 'Voss, M',      'Nwachukwu, E', 'md'  ],
+      ['Holt, B',      'Yamamoto, K',  'Holt, B',      'dec' ],
+      ['Holt, B',      'Pearce, G',    'Holt, B',      'dec' ],
+      ['Holt, B',      'Draper, T',    'Holt, B',      'dec' ],
+      ['Holt, B',      'Voss, M',      'Voss, M',      'dec' ],
+      ['Yamamoto, K',  'Pearce, G',    'Yamamoto, K',  'md'  ],
+      ['Yamamoto, K',  'Draper, T',    'Yamamoto, K',  'dec' ],
+      ['Yamamoto, K',  'Voss, M',      'Yamamoto, K',  'dec' ],
+      ['Pearce, G',    'Draper, T',    'Pearce, G',    'dec' ],
+      ['Pearce, G',    'Voss, M',      'Pearce, G',    'dec' ],
+      ['Draper, T',    'Voss, M',      'Draper, T',    'dec' ],
+      ['Albright, J',  'Munn, P',      'Albright, J',  'fall'],
+      ['Suarez, C',    'Munn, P',      'Suarez, C',    'dec' ],
+      ['Nwachukwu, E', 'Munn, P',      'Nwachukwu, E', 'md'  ],
+      ['Yamamoto, K',  'Munn, P',      'Munn, P',      'dec' ],
+    ],
+
+    '195': [
+      ['Donovan, S',   'Acosta, R',    'Donovan, S',   'fall'],
+      ['Donovan, S',   'Bauer, L',     'Donovan, S',   'tf'  ],
+      ['Donovan, S',   'Kofi, E',      'Donovan, S',   'fall'],
+      ['Donovan, S',   'Strickland, P','Donovan, S',   'md'  ],
+      ['Donovan, S',   'Reinholt, B',  'Donovan, S',   'dec' ],
+      ['Donovan, S',   'Chen, W',      'Donovan, S',   'dec' ],
+      ['Donovan, S',   'Lamar, T',     'Donovan, S',   'fall'],
+      ['Acosta, R',    'Bauer, L',     'Acosta, R',    'dec' ],
+      ['Acosta, R',    'Kofi, E',      'Kofi, E',      'dec' ],  // controversy
+      ['Acosta, R',    'Strickland, P','Acosta, R',    'md'  ],
+      ['Acosta, R',    'Reinholt, B',  'Acosta, R',    'dec' ],
+      ['Acosta, R',    'Chen, W',      'Acosta, R',    'dec' ],
+      ['Acosta, R',    'Lamar, T',     'Acosta, R',    'dec' ],
+      ['Bauer, L',     'Kofi, E',      'Bauer, L',     'dec' ],
+      ['Bauer, L',     'Strickland, P','Bauer, L',     'dec' ],
+      ['Bauer, L',     'Reinholt, B',  'Reinholt, B',  'dec' ],
+      ['Bauer, L',     'Chen, W',      'Bauer, L',     'md'  ],
+      ['Bauer, L',     'Lamar, T',     'Bauer, L',     'dec' ],
+      ['Kofi, E',      'Strickland, P','Kofi, E',      'tf'  ],
+      ['Kofi, E',      'Reinholt, B',  'Kofi, E',      'dec' ],
+      ['Kofi, E',      'Chen, W',      'Kofi, E',      'md'  ],
+      ['Kofi, E',      'Lamar, T',     'Lamar, T',     'dec' ],
+      ['Strickland, P','Reinholt, B',  'Strickland, P','dec' ],
+      ['Strickland, P','Chen, W',      'Strickland, P','dec' ],
+      ['Strickland, P','Lamar, T',     'Strickland, P','md'  ],
+      ['Reinholt, B',  'Chen, W',      'Reinholt, B',  'dec' ],
+      ['Reinholt, B',  'Lamar, T',     'Reinholt, B',  'dec' ],
+      ['Chen, W',      'Lamar, T',     'Chen, W',      'dec' ],
+      ['Donovan, S',   'Kline, F',     'Donovan, S',   'fall'],
+      ['Acosta, R',    'Kline, F',     'Acosta, R',    'md'  ],
+      ['Bauer, L',     'Kline, F',     'Kline, F',     'dec' ],
+      ['Kofi, E',      'Kline, F',     'Kofi, E',      'dec' ],
+    ],
+
+    '220': [
+      ['Gooden, T',    'Vasquez, R',   'Gooden, T',    'fall'],
+      ['Gooden, T',    'Mackay, B',    'Gooden, T',    'fall'],
+      ['Gooden, T',    'Eze, C',       'Gooden, T',    'tf'  ],
+      ['Gooden, T',    'Burrows, D',   'Gooden, T',    'md'  ],
+      ['Gooden, T',    'Tate, A',      'Gooden, T',    'dec' ],
+      ['Gooden, T',    'Pruitt, J',    'Gooden, T',    'fall'],
+      ['Gooden, T',    'Hollis, M',    'Gooden, T',    'dec' ],
+      ['Vasquez, R',   'Mackay, B',    'Vasquez, R',   'dec' ],
+      ['Vasquez, R',   'Eze, C',       'Vasquez, R',   'dec' ],
+      ['Vasquez, R',   'Burrows, D',   'Vasquez, R',   'md'  ],
+      ['Vasquez, R',   'Tate, A',      'Tate, A',      'dec' ],  // upset
+      ['Vasquez, R',   'Pruitt, J',    'Vasquez, R',   'dec' ],
+      ['Vasquez, R',   'Hollis, M',    'Vasquez, R',   'dec' ],
+      ['Mackay, B',    'Eze, C',       'Eze, C',       'dec' ],  // controversy
+      ['Mackay, B',    'Burrows, D',   'Mackay, B',    'dec' ],
+      ['Mackay, B',    'Tate, A',      'Mackay, B',    'md'  ],
+      ['Mackay, B',    'Pruitt, J',    'Mackay, B',    'dec' ],
+      ['Mackay, B',    'Hollis, M',    'Mackay, B',    'dec' ],
+      ['Eze, C',       'Burrows, D',   'Eze, C',       'dec' ],
+      ['Eze, C',       'Tate, A',      'Eze, C',       'md'  ],
+      ['Eze, C',       'Pruitt, J',    'Eze, C',       'dec' ],
+      ['Eze, C',       'Hollis, M',    'Hollis, M',    'dec' ],
+      ['Burrows, D',   'Tate, A',      'Burrows, D',   'dec' ],
+      ['Burrows, D',   'Pruitt, J',    'Pruitt, J',    'tf'  ],
+      ['Burrows, D',   'Hollis, M',    'Burrows, D',   'dec' ],
+      ['Tate, A',      'Pruitt, J',    'Tate, A',      'dec' ],
+      ['Tate, A',      'Hollis, M',    'Tate, A',      'dec' ],
+      ['Pruitt, J',    'Hollis, M',    'Pruitt, J',    'md'  ],
+      ['Gooden, T',    'Gaines, W',    'Gooden, T',    'fall'],
+      ['Vasquez, R',   'Gaines, W',    'Vasquez, R',   'dec' ],
+      ['Mackay, B',    'Gaines, W',    'Gaines, W',    'dec' ],
+      ['Eze, C',       'Gaines, W',    'Eze, C',       'dec' ],
+    ],
+
+    '285': [
+      ['Thornton, B',  'Osei, K',      'Thornton, B',  'fall'],
+      ['Thornton, B',  'Winters, C',   'Thornton, B',  'fall'],
+      ['Thornton, B',  'Padilla, E',   'Thornton, B',  'tf'  ],
+      ['Thornton, B',  'Gupta, R',     'Thornton, B',  'md'  ],
+      ['Thornton, B',  'Stern, M',     'Thornton, B',  'dec' ],
+      ['Thornton, B',  'Clemons, A',   'Thornton, B',  'fall'],
+      ['Thornton, B',  'Witt, J',      'Thornton, B',  'md'  ],
+      ['Osei, K',      'Winters, C',   'Osei, K',      'md'  ],
+      ['Osei, K',      'Padilla, E',   'Osei, K',      'dec' ],
+      ['Osei, K',      'Gupta, R',     'Osei, K',      'dec' ],
+      ['Osei, K',      'Stern, M',     'Stern, M',     'dec' ],  // controversy
+      ['Osei, K',      'Clemons, A',   'Osei, K',      'dec' ],
+      ['Osei, K',      'Witt, J',      'Osei, K',      'md'  ],
+      ['Winters, C',   'Padilla, E',   'Winters, C',   'dec' ],
+      ['Winters, C',   'Gupta, R',     'Gupta, R',     'dec' ],  // controversy
+      ['Winters, C',   'Stern, M',     'Winters, C',   'dec' ],
+      ['Winters, C',   'Clemons, A',   'Winters, C',   'dec' ],
+      ['Winters, C',   'Witt, J',      'Winters, C',   'md'  ],
+      ['Padilla, E',   'Gupta, R',     'Padilla, E',   'dec' ],
+      ['Padilla, E',   'Stern, M',     'Padilla, E',   'dec' ],
+      ['Padilla, E',   'Clemons, A',   'Clemons, A',   'dec' ],
+      ['Padilla, E',   'Witt, J',      'Padilla, E',   'dec' ],
+      ['Gupta, R',     'Stern, M',     'Gupta, R',     'dec' ],
+      ['Gupta, R',     'Clemons, A',   'Gupta, R',     'dec' ],
+      ['Gupta, R',     'Witt, J',      'Witt, J',      'dec' ],
+      ['Stern, M',     'Clemons, A',   'Stern, M',     'tf'  ],
+      ['Stern, M',     'Witt, J',      'Stern, M',     'dec' ],
+      ['Clemons, A',   'Witt, J',      'Clemons, A',   'dec' ],
+      ['Thornton, B',  'Briggs, F',    'Thornton, B',  'fall'],
+      ['Osei, K',      'Briggs, F',    'Osei, K',      'dec' ],
+      ['Winters, C',   'Briggs, F',    'Briggs, F',    'dec' ],
+      ['Padilla, E',   'Briggs, F',    'Padilla, E',   'md'  ],
+      ['Gupta, R',     'Briggs, F',    'Gupta, R',     'dec' ],
+    ],
   };
 
-  data = {};
+  // ── Helper: get method points ──
+  function mpts(m) {
+    return METHOD_PTS[m] || 3;
+  }
 
-  weights.forEach(w => {
-    const names = demoNames[w];
-    const n = names.length;
-    const wins = {};
-    const losses = {};
-    const sos = {};
-    const confidence = {};
-    const power_scores = {};
+  // ── Helper: method label ──
+  function mlabel(pts) {
+    if (pts >= 6) return 'Fall';
+    if (pts >= 5) return 'Tech Fall';
+    if (pts >= 4) return 'Major Dec';
+    return 'Decision';
+  }
+
+  // ── Build structured data from raw matches ──
+  function buildWeightData(matches) {
     const history = {};
-    const common = {};
-    const top_wins = {};
-    const bad_losses = {};
 
-    names.forEach((name, i) => {
-      wins[name] = [];
-      losses[name] = [];
-      sos[name] = Math.round(40 + Math.random() * 55);
-      confidence[name] = Math.round(55 + Math.random() * 40);
-      power_scores[name] = parseFloat((60 + Math.random() * 35 - i * 3.5 + Math.random() * 4).toFixed(1));
-      history[name] = { wins: [], losses: [] };
-      top_wins[name] = [];
-      bad_losses[name] = [];
-      common[name] = {};
+    // First pass: collect all wrestlers
+    matches.forEach(([a, b]) => {
+      if (!history[a]) history[a] = { wins: [], losses: [], win_methods: {}, loss_methods: {} };
+      if (!history[b]) history[b] = { wins: [], losses: [], win_methods: {}, loss_methods: {} };
     });
 
-    // Simulate wins/losses
-    names.forEach((a, i) => {
-      names.forEach((b, j) => {
-        if (i === j) return;
-        common[a][b] = [];
-        if (i < j && Math.random() > 0.4) {
-          // a beats b
-          history[a].wins.push(b);
-          history[b].losses.push(a);
-          if (i < 3) top_wins[a].push(b);
-        } else if (i > j && Math.random() > 0.55) {
-          history[b].wins.push(a);
-          history[a].losses.push(b);
-          if (j === 0) bad_losses[a].push(b);
-        }
-      });
-    });
-
-    // Common opponents
-    names.forEach((a, i) => {
-      names.forEach((b, j) => {
-        if (i >= j) return;
-        if (Math.random() > 0.4) {
-          const opp = 'Opponent ' + Math.ceil(Math.random() * 10);
-          const w1 = Math.random() > 0.5 ? 'W' : 'L';
-          const w2 = Math.random() > 0.5 ? 'W' : 'L';
-          common[a][b].push({ opponent: opp, w1, w2 });
-          common[b][a] = common[a][b].map(c => ({ opponent: c.opponent, w1: c.w2, w2: c.w1 }));
-        }
-      });
-    });
-
-    const sorted = [...names].sort((a, b) => power_scores[b] - power_scores[a]);
-
-    const debateQueue = [];
-    for (let i = 0; i < sorted.length - 1; i++) {
-      const diff = power_scores[sorted[i]] - power_scores[sorted[i+1]];
-      if (diff < 5) {
-        debateQueue.push({ higher: sorted[i], lower: sorted[i+1], reason: 'Close power scores' });
+    // Second pass: record results
+    matches.forEach(([a, b, winner, method]) => {
+      const pts = mpts(method);
+      if (winner === a) {
+        history[a].wins.push(b);
+        history[a].win_methods[b] = pts;
+        history[b].losses.push(a);
+        history[b].loss_methods[a] = pts;
+      } else {
+        history[b].wins.push(a);
+        history[b].win_methods[a] = pts;
+        history[a].losses.push(b);
+        history[a].loss_methods[b] = pts;
       }
+    });
+
+    // Identify field wrestlers (non-common-opponent names)
+    // Common opponents are those only in losses or with very few matches
+    const allNames = Object.keys(history);
+    const matchCounts = {};
+    allNames.forEach(n => {
+      matchCounts[n] = history[n].wins.length + history[n].losses.length;
+    });
+    const maxMatches = Math.max(...Object.values(matchCounts));
+    // Field wrestlers have at least 40% of max matches
+    const fieldWrestlers = allNames.filter(n => matchCounts[n] >= Math.max(4, maxMatches * 0.35));
+
+    // ── SOS (field wrestlers only for display) ──
+    const sos = {};
+    fieldWrestlers.forEach(w => {
+      const opps = [...history[w].wins, ...history[w].losses];
+      const vals = opps.map(o => {
+        const t = history[o] ? history[o].wins.length + history[o].losses.length : 0;
+        return t > 0 ? history[o].wins.length / t : 0;
+      });
+      sos[w] = vals.length ? parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(3)) : 0;
+    });
+
+    // ── Top wins / bad losses ──
+    const top_wins = {}, bad_losses = {};
+    fieldWrestlers.forEach(w => {
+      top_wins[w] = [];
+      bad_losses[w] = [];
+      history[w].wins.forEach(opp => {
+        if (!history[opp]) return;
+        const t = history[opp].wins.length + history[opp].losses.length;
+        if (t > 0 && history[opp].wins.length / t >= 0.65) top_wins[w].push(opp);
+      });
+      history[w].losses.forEach(opp => {
+        if (!history[opp]) return;
+        const t = history[opp].wins.length + history[opp].losses.length;
+        if (t > 0 && history[opp].wins.length / t <= 0.35) bad_losses[w].push(opp);
+      });
+    });
+
+    // ── Average win quality ──
+    function avgWQ(w) {
+      const vals = Object.values(history[w].win_methods);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
     }
 
-    data[w] = {
-      seeds: sorted.map((name, i) => [i + 1, name]),
-      confidence,
-      power_scores,
+    // ── Power scores (mirrors backend exactly) ──
+    const power_scores = {};
+    fieldWrestlers.forEach(w => {
+      const wins = history[w].wins.length;
+      const losses = history[w].losses.length;
+      const total = wins + losses;
+      const win_pct = total ? wins / total : 0;
+      let score = win_pct * 30;
+      score += avgWQ(w) * 4;
+      history[w].wins.forEach(opp => {
+        if (!history[opp]) return;
+        const ot = history[opp].wins.length + history[opp].losses.length;
+        if (ot > 0) {
+          const opp_pct = history[opp].wins.length / ot;
+          const mp = history[w].win_methods[opp] || 3;
+          score += opp_pct * 8 * (mp / 6.0);
+        }
+      });
+      history[w].losses.forEach(opp => {
+        if (!history[opp]) return;
+        const ot = history[opp].wins.length + history[opp].losses.length;
+        if (ot > 0) {
+          const opp_pct = history[opp].wins.length / ot;
+          score -= (1 - opp_pct) * 8;
+        }
+      });
+      score += (sos[w] || 0) * 15;
+      score += top_wins[w].length * 2;
+      score -= bad_losses[w].length * 2;
+      power_scores[w] = parseFloat(score.toFixed(1));
+    });
+
+    // ── Sort seeds by power score ──
+    const sorted = [...fieldWrestlers].sort((a, b) => power_scores[b] - power_scores[a]);
+
+    // ── Compare breakdown (mirrors backend) ──
+    function compareTwo(a, b) {
+      let adv = 0;
+      const reasons = [];
+      const breakdown = { head_to_head: 0, win_quality: 0, record: 0, common: 0, sos: 0, top_wins: 0, bad_losses: 0 };
+
+      // Head-to-head
+      if (history[a].wins.includes(b)) {
+        const mp = history[a].win_methods[b] || 3;
+        const pts = 3 + Math.round(mp * 0.75);
+        adv += pts; breakdown.head_to_head = pts;
+        reasons.push(`${a} beat ${b} (${mlabel(mp)})`);
+      } else if (history[b].wins.includes(a)) {
+        const mp = history[b].win_methods[a] || 3;
+        const pts = 3 + Math.round(mp * 0.75);
+        adv -= pts; breakdown.head_to_head = -pts;
+        reasons.push(`${b} beat ${a} (${mlabel(mp)})`);
+      }
+
+      // Win quality
+      const aqA = avgWQ(a), aqB = avgWQ(b);
+      if (aqA - aqB >= 0.5) { adv += 2; breakdown.win_quality = 2; reasons.push(`${a} wins by better methods (avg ${aqA.toFixed(1)} vs ${aqB.toFixed(1)})`); }
+      else if (aqB - aqA >= 0.5) { adv -= 2; breakdown.win_quality = -2; reasons.push(`${b} wins by better methods (avg ${aqB.toFixed(1)} vs ${aqA.toFixed(1)})`); }
+
+      // Record
+      const r1 = history[a].wins.length - history[a].losses.length;
+      const r2 = history[b].wins.length - history[b].losses.length;
+      if (r1 > r2) { adv += 2; breakdown.record = 2; reasons.push(`${a} has better record`); }
+      else if (r2 > r1) { adv -= 2; breakdown.record = -2; reasons.push(`${b} has better record`); }
+
+      // Common opponents
+      const sharedOpps = [...new Set([...history[a].wins, ...history[a].losses])].filter(o =>
+        history[b].wins.includes(o) || history[b].losses.includes(o)
+      );
+      sharedOpps.forEach(opp => {
+        const aWon = history[a].wins.includes(opp);
+        const bWon = history[b].wins.includes(opp);
+        const apts = aWon ? (history[a].win_methods[opp] || 3) : (history[a].loss_methods[opp] || 3);
+        const bpts = bWon ? (history[b].win_methods[opp] || 3) : (history[b].loss_methods[opp] || 3);
+        if (aWon && !bWon) {
+          const pts = Math.round(1.5 + apts / 6.0);
+          adv += pts; breakdown.common += pts;
+          reasons.push(`${a} beat ${opp} (${mlabel(apts)}), ${b} lost`);
+        } else if (bWon && !aWon) {
+          const pts = Math.round(1.5 + bpts / 6.0);
+          adv -= pts; breakdown.common -= pts;
+          reasons.push(`${b} beat ${opp} (${mlabel(bpts)}), ${a} lost`);
+        } else if (aWon && bWon && apts > bpts + 0.5) {
+          adv += 1; breakdown.common += 1;
+          reasons.push(`${a} beat ${opp} more impressively (${mlabel(apts)} vs ${mlabel(bpts)})`);
+        } else if (aWon && bWon && bpts > apts + 0.5) {
+          adv -= 1; breakdown.common -= 1;
+          reasons.push(`${b} beat ${opp} more impressively (${mlabel(bpts)} vs ${mlabel(apts)})`);
+        }
+      });
+
+      // SOS
+      const sd = (sos[a] || 0) - (sos[b] || 0);
+      if (sd > 0.03) { adv += 1; breakdown.sos = 1; reasons.push(`${a} stronger schedule`); }
+      else if (sd < -0.03) { adv -= 1; breakdown.sos = -1; reasons.push(`${b} stronger schedule`); }
+
+      // Top wins / bad losses
+      const twd = top_wins[a].length - top_wins[b].length;
+      if (twd > 0) { adv += 1; breakdown.top_wins = 1; reasons.push(`${a} more top wins`); }
+      else if (twd < 0) { adv -= 1; breakdown.top_wins = -1; reasons.push(`${b} more top wins`); }
+      const bld = bad_losses[a].length - bad_losses[b].length;
+      if (bld < 0) { adv += 1; breakdown.bad_losses = 1; reasons.push(`${a} fewer bad losses`); }
+      else if (bld > 0) { adv -= 1; breakdown.bad_losses = -1; reasons.push(`${b} fewer bad losses`); }
+
+      // Power score tiebreaker
+      if (adv === 0) {
+        const pd = (power_scores[a] || 0) - (power_scores[b] || 0);
+        if (pd > 0) { adv = 1; reasons.push(`${a} edges on power score`); }
+        else if (pd < 0) { adv = -1; reasons.push(`${b} edges on power score`); }
+      }
+
+      return { winner: adv > 0 ? a : adv < 0 ? b : 'Too close', advantage: adv, reasons, breakdown };
+    }
+
+    // ── Confidence ──
+    const confidence = {};
+    sorted.forEach((name, i) => {
+      if (i === sorted.length - 1) { confidence[name] = 55; return; }
+      const comp = compareTwo(name, sorted[i + 1]);
+      confidence[name] = Math.max(10, Math.min(97, Math.round(50 + comp.advantage * 4)));
+    });
+
+    // ── Common opponents map ──
+    const common = {};
+    fieldWrestlers.forEach(a => {
+      common[a] = {};
+      fieldWrestlers.forEach(b => {
+        if (a === b) return;
+        const sharedOpps = [...new Set([...history[a].wins, ...history[a].losses])].filter(o =>
+          history[b].wins.includes(o) || history[b].losses.includes(o)
+        );
+        common[a][b] = sharedOpps.map(opp => {
+          const aWon = history[a].wins.includes(opp);
+          const bWon = history[b].wins.includes(opp);
+          return {
+            opponent: opp,
+            w1: aWon ? 'W' : 'L',
+            w2: bWon ? 'W' : 'L',
+            w1_pts: aWon ? (history[a].win_methods[opp] || 3) : (history[a].loss_methods[opp] || 3),
+            w2_pts: bWon ? (history[b].win_methods[opp] || 3) : (history[b].loss_methods[opp] || 3),
+          };
+        });
+      });
+    });
+
+    // ── Alerts ──
+    const controversy_flags = [], upset_alerts = [], debate_queue = [];
+    sorted.forEach((name, i) => {
+      if (i >= 5 && (top_wins[name].length >= 2 || (sos[name] || 0) >= 0.55)) {
+        upset_alerts.push(`${name} (seed ${i+1}): ${top_wins[name].length} top wins, SOS ${(sos[name]||0).toFixed(3)}`);
+      }
+      if (i < sorted.length - 1) {
+        const nxt = sorted[i + 1];
+        const comp = compareTwo(name, nxt);
+        if (comp.winner === nxt) {
+          controversy_flags.push(`Seed ${i+1} vs ${i+2}: algorithm favors ${nxt} over ${name} — review recommended`);
+        }
+        if (Math.abs(comp.advantage) <= 2 || comp.winner === 'Too close') {
+          debate_queue.push({ higher: name, lower: nxt, reason: comp.reasons[0] || 'No clear separator', advantage: comp.advantage });
+        }
+      }
+    });
+
+    // ── Win method summary ──
+    const win_methods = {};
+    fieldWrestlers.forEach(w => {
+      win_methods[w] = { fall: 0, tech_fall: 0, major_dec: 0, decision: 0 };
+      Object.values(history[w].win_methods).forEach(pts => {
+        if (pts >= 6) win_methods[w].fall++;
+        else if (pts >= 5) win_methods[w].tech_fall++;
+        else if (pts >= 4) win_methods[w].major_dec++;
+        else win_methods[w].decision++;
+      });
+    });
+
+    return {
+      seeds:             sorted.map((name, i) => [i + 1, name]),
+      history:           Object.fromEntries(fieldWrestlers.map(w => [w, history[w]])),
       sos,
-      history,
       common,
+      confidence,
       top_wins,
       bad_losses,
-      controversy_flags: debateQueue.length > 0 ? [`Seed 1 vs Seed 2 close — ${debateQueue[0].higher} vs ${debateQueue[0].lower}`] : [],
-      upset_alerts: power_scores[sorted[1]] > power_scores[sorted[0]] - 3 ? [`${sorted[1]} within striking range of ${sorted[0]}`] : [],
-      debate_queue: debateQueue,
+      power_scores,
+      win_methods,
+      controversy_flags,
+      upset_alerts,
+      debate_queue,
     };
+  }
+
+  // ── Build all weights ──
+  data = {};
+  Object.entries(RAW_MATCHES).forEach(([weight, matches]) => {
+    data[weight] = buildWeightData(matches);
   });
 
   onDataLoaded();
-  toast('✓ Demo data loaded — 10 weight classes');
+  toast('✓ Demo loaded — 10 weights, late-season data');
 }
 
 // ── UPLOAD ──
