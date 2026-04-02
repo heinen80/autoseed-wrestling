@@ -1,635 +1,1755 @@
 <!DOCTYPE html>
-<html>
+
+<html lang="en">
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeedIT</title>
-
+<meta charset="UTF-8">
+<title>SeedIT — Wrestling Seeding Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-body {
-  font-family: -apple-system, sans-serif;
-  margin: 0;
-  background: linear-gradient(135deg, #0f172a, #1e293b);
-  color: white;
-}
-
-.container {
-  max-width: 1120px;
-  margin: auto;
-  padding: 20px;
-}
-
-.logo {
-  width: 320px;
-  max-width: 92%;
-  display: block;
-  margin: 0 auto 10px auto;
-}
-
-.sub {
-  text-align: center;
-  opacity: 0.8;
-  margin-bottom: 20px;
-}
-
-.card {
-  background: rgba(255,255,255,0.05);
-  border-radius: 14px;
-  padding: 16px;
-  margin: 12px 0;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.15);
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.09);
-  cursor: pointer;
-}
-
-.row:hover {
-  background: rgba(255,255,255,0.08);
-}
-
-.left-col {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.right-col {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.lock { color: #22c55e; }
-.lean { color: #facc15; }
-.debate { color: #ef4444; }
-
-button {
-  padding: 10px 12px;
-  margin: 5px;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: white;
-  font-weight: 700;
-  transition: all 0.2s ease;
-}
-
-button:hover {
-  transform: translateY(-2px);
-  opacity: 0.92;
-}
-
-.secondary { background: #10b981; }
-.warn { background: #dc2626; }
-.dark { background: #334155; }
-
-.big {
-  font-size: 24px;
-  margin-top: 15px;
-  text-align: center;
-}
-
-h2 {
-  margin: 0;
-  font-weight: 700;
-}
-
-h3 {
-  margin-top: 0;
-}
-
-.badge {
-  display: inline-block;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.08);
-  font-size: 12px;
-  margin-right: 6px;
-}
-
-.alert {
-  background: rgba(239,68,68,0.18);
-  border: 1px solid rgba(239,68,68,0.35);
-  border-radius: 10px;
-  padding: 10px;
-  margin: 8px 0;
-}
-
-.good {
-  background: rgba(34,197,94,0.15);
-  border: 1px solid rgba(34,197,94,0.3);
-  border-radius: 10px;
-  padding: 10px;
-  margin: 8px 0;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-@media (min-width: 900px) {
-  .grid {
-    grid-template-columns: 1.1fr 0.9fr;
+  :root {
+    --bg:        #080c14;
+    --surface:   #0d1422;
+    --surface2:  #111827;
+    --border:    rgba(255,255,255,0.07);
+    --border2:   rgba(255,255,255,0.13);
+    --gold:      #f5c842;
+    --gold-dim:  rgba(245,200,66,0.12);
+    --red:       #ef4444;
+    --red-dim:   rgba(239,68,68,0.12);
+    --green:     #22c55e;
+    --green-dim: rgba(34,197,94,0.12);
+    --blue:      #3b82f6;
+    --blue-dim:  rgba(59,130,246,0.12);
+    --amber:     #f59e0b;
+    --text:      #f1f5f9;
+    --muted:     #64748b;
+    --muted2:    #94a3b8;
+    --accent:    #f5c842;
+    --font-display: 'Barlow Condensed', sans-serif;
+    --font-body:    'Barlow', sans-serif;
+    --font-mono:    'JetBrains Mono', monospace;
   }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+font-family: var(–font-body);
+background: var(–bg);
+color: var(–text);
+min-height: 100vh;
+overflow-x: hidden;
 }
 
-.muted {
-  opacity: 0.78;
+/* ── NOISE TEXTURE OVERLAY ── */
+body::before {
+content: ‘’;
+position: fixed;
+inset: 0;
+background-image: url(“data:image/svg+xml,%3Csvg viewBox=‘0 0 256 256’ xmlns=‘http://www.w3.org/2000/svg’%3E%3Cfilter id=‘noise’%3E%3CfeTurbulence type=‘fractalNoise’ baseFrequency=‘0.9’ numOctaves=‘4’ stitchTiles=‘stitch’/%3E%3C/filter%3E%3Crect width=‘100%25’ height=‘100%25’ filter=‘url(%23noise)’ opacity=‘0.035’/%3E%3C/svg%3E”);
+pointer-events: none;
+z-index: 9999;
+opacity: 0.4;
 }
 
-hr {
-  border: none;
-  border-top: 1px solid rgba(255,255,255,0.12);
-  margin: 14px 0;
+/* ── GRID LINES ── */
+body::after {
+content: ‘’;
+position: fixed;
+inset: 0;
+background-image:
+linear-gradient(rgba(245,200,66,0.015) 1px, transparent 1px),
+linear-gradient(90deg, rgba(245,200,66,0.015) 1px, transparent 1px);
+background-size: 40px 40px;
+pointer-events: none;
+z-index: 0;
 }
 
-.input-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+/* ── LAYOUT ── */
+.shell {
+position: relative;
+z-index: 1;
+max-width: 1280px;
+margin: 0 auto;
+padding: 0 20px 60px;
 }
 
-input[type="text"], select {
-  padding: 10px;
-  border-radius: 8px;
-  border: none;
-  min-width: 150px;
+/* ── HEADER ── */
+header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 20px 0 0;
+border-bottom: 1px solid var(–border2);
+margin-bottom: 0;
+flex-wrap: wrap;
+gap: 12px;
+}
+
+.logo-area {
+display: flex;
+align-items: center;
+gap: 14px;
+}
+
+.logo-mark {
+width: 44px;
+height: 44px;
+background: var(–gold);
+border-radius: 6px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-family: var(–font-display);
+font-weight: 900;
+font-size: 22px;
+color: #080c14;
+letter-spacing: -1px;
+flex-shrink: 0;
+}
+
+.logo-text {
+font-family: var(–font-display);
+font-weight: 900;
+font-size: 28px;
+letter-spacing: 2px;
+text-transform: uppercase;
+color: var(–text);
+line-height: 1;
+}
+
+.logo-sub {
+font-family: var(–font-mono);
+font-size: 10px;
+color: var(–gold);
+letter-spacing: 3px;
+text-transform: uppercase;
+margin-top: 3px;
+}
+
+.header-actions {
+display: flex;
+gap: 8px;
+flex-wrap: wrap;
+}
+
+/* ── HERO ── */
+.hero {
+padding: 48px 0 40px;
+position: relative;
+}
+
+.hero-eyebrow {
+font-family: var(–font-mono);
+font-size: 11px;
+letter-spacing: 4px;
+text-transform: uppercase;
+color: var(–gold);
+margin-bottom: 14px;
+}
+
+.hero h1 {
+font-family: var(–font-display);
+font-size: clamp(36px, 7vw, 72px);
+font-weight: 900;
+text-transform: uppercase;
+letter-spacing: 1px;
+line-height: 0.95;
+color: var(–text);
+margin-bottom: 20px;
+}
+
+.hero h1 span {
+color: var(–gold);
+display: block;
+}
+
+.hero-desc {
+font-size: 15px;
+color: var(–muted2);
+max-width: 560px;
+line-height: 1.6;
+margin-bottom: 32px;
+}
+
+.pill-list {
+display: flex;
+flex-wrap: wrap;
+gap: 8px;
+margin-bottom: 36px;
+}
+
+.pill {
+display: inline-flex;
+align-items: center;
+gap: 6px;
+padding: 5px 12px;
+border-radius: 999px;
+border: 1px solid var(–border2);
+font-family: var(–font-mono);
+font-size: 11px;
+letter-spacing: 1px;
+color: var(–muted2);
+background: var(–surface);
+}
+
+.pill-dot {
+width: 6px;
+height: 6px;
+border-radius: 50%;
+background: var(–gold);
+}
+
+/* ── UPLOAD ZONE ── */
+.upload-zone {
+border: 2px dashed rgba(245,200,66,0.25);
+border-radius: 12px;
+padding: 36px;
+text-align: center;
+cursor: pointer;
+transition: all 0.2s;
+background: rgba(245,200,66,0.03);
+position: relative;
+overflow: hidden;
+}
+
+.upload-zone:hover, .upload-zone.drag-over {
+border-color: var(–gold);
+background: var(–gold-dim);
+}
+
+.upload-zone::before {
+content: ‘’;
+position: absolute;
+top: -50%;
+left: -50%;
+width: 200%;
+height: 200%;
+background: radial-gradient(ellipse at center, rgba(245,200,66,0.04) 0%, transparent 70%);
+pointer-events: none;
+}
+
+.upload-icon {
+font-size: 36px;
+margin-bottom: 10px;
+display: block;
+}
+
+.upload-title {
+font-family: var(–font-display);
+font-size: 20px;
+font-weight: 700;
+letter-spacing: 1px;
+text-transform: uppercase;
+color: var(–text);
+margin-bottom: 6px;
+}
+
+.upload-sub {
+font-size: 13px;
+color: var(–muted);
+}
+
+/* ── BUTTONS ── */
+.btn {
+display: inline-flex;
+align-items: center;
+gap: 7px;
+padding: 10px 18px;
+border: none;
+border-radius: 7px;
+font-family: var(–font-display);
+font-size: 14px;
+font-weight: 700;
+letter-spacing: 1px;
+text-transform: uppercase;
+cursor: pointer;
+transition: all 0.18s ease;
+white-space: nowrap;
+}
+
+.btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.btn:active { transform: translateY(0); }
+
+.btn-primary   { background: var(–gold); color: #080c14; }
+.btn-secondary { background: var(–green); color: #080c14; }
+.btn-ghost     { background: var(–surface2); color: var(–muted2); border: 1px solid var(–border2); }
+.btn-danger    { background: var(–red); color: white; }
+.btn-outline   { background: transparent; color: var(–gold); border: 1px solid rgba(245,200,66,0.4); }
+
+.btn-sm {
+padding: 7px 13px;
+font-size: 12px;
+}
+
+/* ── WEIGHT TABS ── */
+#weights-bar {
+display: none;
+background: var(–surface);
+border: 1px solid var(–border2);
+border-radius: 10px;
+padding: 14px 16px;
+margin: 24px 0;
+}
+
+#weights-bar.visible { display: block; }
+
+.weights-label {
+font-family: var(–font-mono);
+font-size: 10px;
+letter-spacing: 3px;
+text-transform: uppercase;
+color: var(–muted);
+margin-bottom: 10px;
+}
+
+.weight-tabs {
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
+}
+
+.weight-tab {
+padding: 7px 16px;
+border-radius: 6px;
+border: 1px solid var(–border2);
+background: var(–surface2);
+color: var(–muted2);
+font-family: var(–font-display);
+font-size: 15px;
+font-weight: 700;
+letter-spacing: 1px;
+cursor: pointer;
+transition: all 0.15s;
+}
+
+.weight-tab:hover { border-color: var(–gold); color: var(–gold); }
+.weight-tab.active { background: var(–gold); color: #080c14; border-color: var(–gold); }
+
+/* ── MAIN GRID ── */
+.main-grid {
+display: grid;
+grid-template-columns: 1fr;
+gap: 20px;
+}
+
+@media (min-width: 960px) {
+.main-grid {
+grid-template-columns: 1.15fr 0.85fr;
+}
+}
+
+/* ── PANEL ── */
+.panel {
+background: var(–surface);
+border: 1px solid var(–border2);
+border-radius: 12px;
+overflow: hidden;
+}
+
+.panel-header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+padding: 14px 18px;
+border-bottom: 1px solid var(–border);
+background: rgba(255,255,255,0.02);
+flex-wrap: wrap;
+gap: 8px;
+}
+
+.panel-title {
+font-family: var(–font-display);
+font-size: 16px;
+font-weight: 800;
+letter-spacing: 2px;
+text-transform: uppercase;
+color: var(–text);
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+.panel-title .dot {
+width: 8px;
+height: 8px;
+border-radius: 50%;
+background: var(–gold);
+}
+
+/* ── SEED ROWS ── */
+.seed-list { padding: 6px 0; }
+
+.seed-row {
+display: grid;
+grid-template-columns: 44px 1fr auto;
+align-items: center;
+gap: 10px;
+padding: 10px 16px;
+border-bottom: 1px solid var(–border);
+cursor: pointer;
+transition: background 0.12s;
+position: relative;
+}
+
+.seed-row:last-child { border-bottom: none; }
+.seed-row:hover { background: rgba(255,255,255,0.04); }
+.seed-row.selected { background: var(–gold-dim); border-left: 3px solid var(–gold); }
+
+.seed-num {
+font-family: var(–font-display);
+font-size: 22px;
+font-weight: 900;
+color: var(–muted);
+text-align: center;
+line-height: 1;
+}
+
+.seed-row.selected .seed-num { color: var(–gold); }
+
+.seed-1 .seed-num { color: var(–gold); }
+.seed-2 .seed-num { color: #e2e8f0; }
+.seed-3 .seed-num { color: var(–amber); }
+.seed-4 .seed-num { color: var(–amber); opacity: 0.7; }
+
+.seed-info { min-width: 0; }
+
+.seed-name {
+font-family: var(–font-display);
+font-size: 17px;
+font-weight: 700;
+letter-spacing: 0.5px;
+color: var(–text);
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+
+.seed-meta {
+display: flex;
+gap: 10px;
+margin-top: 2px;
+font-family: var(–font-mono);
+font-size: 11px;
+color: var(–muted);
+}
+
+.seed-right {
+text-align: right;
+flex-shrink: 0;
+}
+
+.conf-badge {
+display: inline-block;
+padding: 3px 9px;
+border-radius: 5px;
+font-family: var(–font-display);
+font-size: 13px;
+font-weight: 700;
+letter-spacing: 1px;
+margin-bottom: 3px;
+}
+
+.conf-lock   { background: var(–green-dim); color: var(–green); }
+.conf-lean   { background: rgba(245,158,11,0.15); color: var(–amber); }
+.conf-debate { background: var(–red-dim); color: var(–red); }
+
+.sos-label {
+font-family: var(–font-mono);
+font-size: 10px;
+color: var(–muted);
+}
+
+/* ── DETAIL PANEL ── */
+#details {
+position: sticky;
+top: 20px;
+max-height: 90vh;
+overflow-y: auto;
+}
+
+.detail-empty {
+padding: 48px 24px;
+text-align: center;
+}
+
+.detail-empty-icon {
+font-size: 40px;
+margin-bottom: 12px;
+opacity: 0.4;
+}
+
+.detail-empty-text {
+font-family: var(–font-display);
+font-size: 16px;
+font-weight: 700;
+text-transform: uppercase;
+letter-spacing: 2px;
+color: var(–muted);
+}
+
+.detail-empty-sub {
+font-size: 13px;
+color: var(–muted);
+margin-top: 6px;
+}
+
+/* ── COMPARE CARD ── */
+.compare-header {
+padding: 18px 18px 14px;
+border-bottom: 1px solid var(–border);
+}
+
+.compare-vs {
+display: grid;
+grid-template-columns: 1fr auto 1fr;
+align-items: center;
+gap: 10px;
+margin-bottom: 14px;
+}
+
+.compare-wrestler {
+padding: 12px;
+background: var(–surface2);
+border-radius: 8px;
+border: 1px solid var(–border2);
+}
+
+.compare-wrestler.winner {
+border-color: var(–gold);
+background: var(–gold-dim);
+}
+
+.compare-wrestler-name {
+font-family: var(–font-display);
+font-size: 16px;
+font-weight: 800;
+text-transform: uppercase;
+letter-spacing: 1px;
+color: var(–text);
+margin-bottom: 4px;
+}
+
+.compare-record {
+font-family: var(–font-mono);
+font-size: 11px;
+color: var(–muted2);
+}
+
+.vs-badge {
+font-family: var(–font-display);
+font-size: 18px;
+font-weight: 900;
+color: var(–muted);
+letter-spacing: 1px;
+text-align: center;
+}
+
+/* ── SCORE BARS ── */
+.score-section {
+padding: 16px 18px;
+border-bottom: 1px solid var(–border);
+}
+
+.score-section-title {
+font-family: var(–font-mono);
+font-size: 10px;
+letter-spacing: 3px;
+text-transform: uppercase;
+color: var(–muted);
+margin-bottom: 12px;
+}
+
+.score-bar-row {
+margin-bottom: 10px;
+}
+
+.score-bar-label {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 5px;
+}
+
+.score-bar-name {
+font-size: 12px;
+color: var(–muted2);
+font-family: var(–font-body);
+}
+
+.score-bar-val {
+font-family: var(–font-mono);
+font-size: 11px;
+font-weight: 600;
+color: var(–text);
+}
+
+.score-bar-track {
+height: 6px;
+background: var(–surface2);
+border-radius: 999px;
+overflow: hidden;
+position: relative;
+}
+
+.score-bar-fill {
+height: 100%;
+border-radius: 999px;
+transition: width 0.5s ease;
+}
+
+.bar-positive { background: var(–green); }
+.bar-negative { background: var(–red); }
+.bar-neutral  { background: var(–muted); }
+
+/* ── RECOMMENDATION ── */
+.recommend-banner {
+margin: 14px 18px;
+padding: 14px 16px;
+border-radius: 8px;
+background: var(–gold-dim);
+border: 1px solid rgba(245,200,66,0.3);
+display: flex;
+align-items: center;
+gap: 10px;
+}
+
+.recommend-label {
+font-family: var(–font-mono);
+font-size: 10px;
+letter-spacing: 2px;
+text-transform: uppercase;
+color: var(–gold);
+margin-bottom: 2px;
+}
+
+.recommend-name {
+font-family: var(–font-display);
+font-size: 20px;
+font-weight: 900;
+text-transform: uppercase;
+letter-spacing: 1px;
+color: var(–gold);
+}
+
+.recommend-icon { font-size: 28px; }
+
+/* ── WIN/LOSS TABLE ── */
+.wl-grid {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 10px;
+padding: 14px 18px;
+border-bottom: 1px solid var(–border);
+}
+
+.wl-box {
+background: var(–surface2);
+border-radius: 8px;
+padding: 12px;
+border: 1px solid var(–border);
+}
+
+.wl-box-title {
+font-family: var(–font-mono);
+font-size: 10px;
+letter-spacing: 2px;
+text-transform: uppercase;
+color: var(–muted);
+margin-bottom: 8px;
+}
+
+.wl-name {
+font-family: var(–font-display);
+font-size: 13px;
+font-weight: 700;
+color: var(–muted2);
+margin-bottom: 4px;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+}
+
+.wl-items {
+font-size: 12px;
+color: var(–muted);
+line-height: 1.6;
+}
+
+/* ── COMMON OPPONENTS ── */
+.common-section {
+padding: 14px 18px;
+border-bottom: 1px solid var(–border);
+}
+
+.common-row {
+display: grid;
+grid-template-columns: 1fr auto auto;
+gap: 8px;
+align-items: center;
+padding: 6px 0;
+border-bottom: 1px solid var(–border);
+font-size: 13px;
+}
+
+.common-row:last-child { border-bottom: none; }
+
+.common-opp { color: var(–muted2); }
+
+.result-badge {
+padding: 2px 8px;
+border-radius: 4px;
+font-family: var(–font-mono);
+font-size: 11px;
+font-weight: 600;
+}
+
+.result-w { background: var(–green-dim); color: var(–green); }
+.result-l { background: var(–red-dim); color: var(–red); }
+
+/* ── VOTE SECTION ── */
+.vote-section {
+padding: 14px 18px;
+border-bottom: 1px solid var(–border);
+}
+
+.vote-inputs {
+display: flex;
+gap: 8px;
+margin-bottom: 10px;
+flex-wrap: wrap;
+}
+
+.vote-input {
+flex: 1;
+min-width: 130px;
+padding: 9px 12px;
+background: var(–surface2);
+border: 1px solid var(–border2);
+border-radius: 7px;
+color: var(–text);
+font-family: var(–font-body);
+font-size: 13px;
+outline: none;
+transition: border-color 0.15s;
+}
+
+.vote-input:focus { border-color: var(–gold); }
+
+.vote-select {
+padding: 9px 12px;
+background: var(–surface2);
+border: 1px solid var(–border2);
+border-radius: 7px;
+color: var(–text);
+font-family: var(–font-body);
+font-size: 13px;
+outline: none;
+cursor: pointer;
+}
+
+.vote-buttons {
+display: flex;
+gap: 8px;
+}
+
+.vote-btn {
+flex: 1;
+padding: 10px;
+border: 1px solid var(–border2);
+border-radius: 7px;
+background: var(–surface2);
+color: var(–muted2);
+font-family: var(–font-display);
+font-size: 14px;
+font-weight: 700;
+letter-spacing: 1px;
+text-transform: uppercase;
+cursor: pointer;
+transition: all 0.15s;
+}
+
+.vote-btn:hover {
+border-color: var(–gold);
+color: var(–gold);
+background: var(–gold-dim);
+}
+
+#votes-live {
+margin-top: 10px;
+font-family: var(–font-mono);
+font-size: 12px;
+color: var(–muted2);
+line-height: 1.8;
+}
+
+.votes-live-title {
+font-size: 10px;
+letter-spacing: 2px;
+text-transform: uppercase;
+color: var(–muted);
+margin-bottom: 4px;
+}
+
+.live-dot {
+display: inline-block;
+width: 6px;
+height: 6px;
+border-radius: 50%;
+background: var(–green);
+margin-right: 5px;
+animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+0%, 100% { opacity: 1; }
+50% { opacity: 0.3; }
+}
+
+/* ── SWAP / ACTIONS ── */
+.detail-actions {
+padding: 14px 18px;
+display: flex;
+gap: 8px;
+flex-wrap: wrap;
+}
+
+/* ── FLAGS ── */
+.flag-alert {
+margin: 10px 18px;
+padding: 10px 14px;
+border-radius: 7px;
+font-size: 13px;
+line-height: 1.5;
+}
+
+.flag-red {
+background: var(–red-dim);
+border: 1px solid rgba(239,68,68,0.25);
+color: #fca5a5;
+}
+
+.flag-green {
+background: var(–green-dim);
+border: 1px solid rgba(34,197,94,0.25);
+color: #86efac;
+}
+
+.flag-title {
+font-family: var(–font-mono);
+font-size: 10px;
+letter-spacing: 2px;
+text-transform: uppercase;
+margin-bottom: 5px;
+opacity: 0.7;
+}
+
+/* ── TOOLBAR ── */
+.toolbar {
+display: none;
+background: var(–surface);
+border: 1px solid var(–border2);
+border-radius: 10px;
+padding: 12px 16px;
+margin-bottom: 16px;
+gap: 8px;
+flex-wrap: wrap;
+align-items: center;
+}
+
+.toolbar.visible { display: flex; }
+
+/* ── STATS BAR ── */
+.stats-bar {
+display: none;
+gap: 0;
+background: var(–surface);
+border: 1px solid var(–border2);
+border-radius: 10px;
+overflow: hidden;
+margin-bottom: 20px;
+}
+
+.stats-bar.visible { display: flex; }
+
+.stat-item {
+flex: 1;
+padding: 14px 16px;
+border-right: 1px solid var(–border);
+text-align: center;
+}
+
+.stat-item:last-child { border-right: none; }
+
+.stat-num {
+font-family: var(–font-display);
+font-size: 26px;
+font-weight: 900;
+color: var(–gold);
+line-height: 1;
+margin-bottom: 3px;
+}
+
+.stat-label {
+font-family: var(–font-mono);
+font-size: 9px;
+letter-spacing: 2px;
+text-transform: uppercase;
+color: var(–muted);
+}
+
+/* ── TOAST ── */
+#toast {
+position: fixed;
+bottom: 24px;
+right: 24px;
+background: var(–surface);
+border: 1px solid var(–gold);
+border-radius: 8px;
+padding: 12px 18px;
+font-family: var(–font-display);
+font-size: 14px;
+font-weight: 700;
+letter-spacing: 1px;
+color: var(–gold);
+transform: translateY(80px);
+opacity: 0;
+transition: all 0.3s ease;
+z-index: 1000;
+pointer-events: none;
+}
+
+#toast.show {
+transform: translateY(0);
+opacity: 1;
+}
+
+/* ── FOOTER ── */
+footer {
+margin-top: 60px;
+padding-top: 20px;
+border-top: 1px solid var(–border);
+display: flex;
+justify-content: space-between;
+align-items: center;
+flex-wrap: wrap;
+gap: 10px;
+}
+
+.footer-left {
+font-family: var(–font-mono);
+font-size: 11px;
+color: var(–muted);
+letter-spacing: 1px;
+}
+
+.footer-left span { color: var(–gold); }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(–border2); border-radius: 999px; }
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp {
+from { opacity: 0; transform: translateY(12px); }
+to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in { animation: fadeUp 0.35s ease forwards; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 640px) {
+.hero h1 { font-size: 36px; }
+.stats-bar { flex-wrap: wrap; }
+.stat-item { min-width: 50%; }
+header { padding: 14px 0 0; }
+.compare-vs { grid-template-columns: 1fr; }
+.vs-badge { display: none; }
 }
 </style>
-</head>
 
+</head>
 <body>
 
-<div class="container">
+<div class="shell">
 
-  <div class="card" style="text-align:center; padding:30px 20px;">
-    <img src="https://raw.githubusercontent.com/heinen80/autoseed-wrestling/main/IMG_5539.png" class="logo">
-    <h2 style="margin-top:10px;">Run Your Seeding Meeting Before It Starts</h2>
-    <div class="sub">
-      Head-to-head • Common opponents • Strength of schedule • Top wins • Bad losses • Live coach voting
+  <!-- HEADER -->
+
+  <header>
+    <div class="logo-area">
+      <div class="logo-mark">S</div>
+      <div>
+        <div class="logo-text">SeedIT</div>
+        <div class="logo-sub">Wrestling Seeding Engine</div>
+      </div>
     </div>
-    <button onclick="document.getElementById('file').click()">Upload Tournament Data</button>
+    <div class="header-actions">
+      <button class="btn btn-ghost btn-sm" onclick="exportSeeds()">⬇ Export Seeds</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportMeetingReport()">📋 Export Report</button>
+    </div>
+  </header>
+
+  <!-- HERO -->
+
+  <div id="hero-section" class="hero">
+    <div class="hero-eyebrow">▸ Data-Driven Tournament Seeding</div>
+    <h1>Run Your Seeding<span>Meeting Before</span>It Starts.</h1>
+    <p class="hero-desc">Upload your season data and get defensible, transparent seeds in seconds. Every seed comes with a full breakdown so coaches stop arguing and start competing.</p>
+    <div class="pill-list">
+      <div class="pill"><span class="pill-dot"></span>Head-to-Head</div>
+      <div class="pill"><span class="pill-dot"></span>Common Opponents</div>
+      <div class="pill"><span class="pill-dot"></span>Strength of Schedule</div>
+      <div class="pill"><span class="pill-dot"></span>Top Wins</div>
+      <div class="pill"><span class="pill-dot"></span>Bad Losses</div>
+      <div class="pill"><span class="pill-dot"></span>Live Coach Voting</div>
+    </div>
+
+```
+<div class="upload-zone" id="upload-zone"
+  onclick="document.getElementById('file').click()"
+  ondragover="event.preventDefault(); this.classList.add('drag-over')"
+  ondragleave="this.classList.remove('drag-over')"
+  ondrop="handleDrop(event)">
+  <span class="upload-icon">📂</span>
+  <div class="upload-title">Upload Season Data</div>
+  <div class="upload-sub">Drop a CSV file here or click to browse</div>
+  <input type="file" id="file" style="display:none" accept=".csv" onchange="upload()">
+</div>
+
+<div style="margin-top: 12px; text-align:center;">
+  <button class="btn btn-primary" onclick="loadDemo()" style="margin-right:8px;">▶ Load Demo Data</button>
+  <button class="btn btn-ghost" onclick="document.getElementById('file').click()">Upload CSV</button>
+</div>
+```
+
   </div>
 
-  <div class="card">
-    <div class="input-row">
-      <input type="file" id="file" style="display:none">
-      <button onclick="upload()">Upload Season Data</button>
-      <button class="secondary" onclick="exportSeeds()">Export Final Seeds</button>
-      <button class="dark" onclick="exportMeetingReport()">Export Meeting Report</button>
+  <!-- STATS BAR -->
+
+  <div class="stats-bar" id="stats-bar">
+    <div class="stat-item">
+      <div class="stat-num" id="stat-weights">—</div>
+      <div class="stat-label">Weight Classes</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="stat-wrestlers">—</div>
+      <div class="stat-label">Wrestlers</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="stat-locked">—</div>
+      <div class="stat-label">Seeds Locked</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="stat-debates">—</div>
+      <div class="stat-label">Active Debates</div>
     </div>
   </div>
 
-  <div id="weights" class="card"></div>
+  <!-- WEIGHT TABS -->
 
-  <div class="grid">
-    <div id="main"></div>
-    <div id="details" class="card"></div>
+  <div id="weights-bar">
+    <div class="weights-label">▸ Select Weight Class</div>
+    <div class="weight-tabs" id="weight-tabs"></div>
+  </div>
+
+  <!-- TOOLBAR -->
+
+  <div class="toolbar" id="toolbar">
+    <button class="btn btn-ghost btn-sm" onclick="runDebateQueue()">⚠ Debate Queue</button>
+    <button class="btn btn-ghost btn-sm" onclick="showAutoReview()">🔍 Review Flags</button>
+    <button class="btn btn-outline btn-sm" onclick="exportSeeds()">⬇ Seeds CSV</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportMeetingReport()">📋 Full Report</button>
+  </div>
+
+  <!-- MAIN GRID -->
+
+  <div class="main-grid" id="main-grid">
+    <div id="seed-panel"></div>
+    <div id="details" class="panel">
+      <div class="detail-empty">
+        <div class="detail-empty-icon">🎯</div>
+        <div class="detail-empty-text">No Weight Selected</div>
+        <div class="detail-empty-sub">Upload data and select a weight class to begin comparing seeds</div>
+      </div>
+    </div>
   </div>
 
 </div>
 
+<!-- TOAST -->
+
+<div id="toast"></div>
+
 <script>
 const API = "https://autoseed-backend.onrender.com";
-
 let data = {};
 let currentWeight = null;
 let lockedSeeds = {};
 let voteInterval = null;
-let currentCompare = null;
+let selectedRow = null;
 
-// ---------------- UPLOAD
-async function upload(){
-  const f = document.getElementById("file").files[0];
-  if (!f) {
-    alert("Choose a file first");
-    return;
+// ── TOAST ──
+function toast(msg, duration = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ── DROP HANDLER ──
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) {
+    const dt = new DataTransfer();
+    dt.items.add(f);
+    document.getElementById('file').files = dt.files;
+    upload();
   }
+}
 
+// ── DEMO DATA ──
+function loadDemo() {
+  // Build a realistic demo dataset
+  const weights = ['132', '138', '145', '152', '160', '170', '182', '195', '220', '285'];
+  const demoNames = {
+    '132': ['Reynolds, C', 'Martinez, D', 'Thompson, K', 'Walsh, B', 'Nguyen, P', 'Chen, R', 'Brooks, J', 'Fisher, T'],
+    '138': ['Callahan, M', 'Soto, E', 'Patterson, L', 'Dunn, W', 'Pearce, A', 'Gray, S', 'Morris, C', 'Burke, J'],
+    '145': ['Henderson, T', 'Rivera, M', 'Collins, B', 'Sanders, G', 'Price, D', 'Wood, F', 'Barnes, A', 'Cook, P'],
+    '152': ['Powell, H', 'Hughes, N', 'Flores, J', 'Washington, D', 'Butler, K', 'Simmons, R', 'Foster, T', 'Gonzalez, L'],
+    '160': ['Bryant, C', 'Alexander, M', 'Russell, B', 'Griffin, J', 'Diaz, E', 'Hayes, W', 'Myers, T', 'Ford, S'],
+    '170': ['Hamilton, A', 'Graham, B', 'Sullivan, C', 'Wallace, D', 'Woods, E', 'Cole, F', 'West, G', 'Jordan, H'],
+    '182': ['Owen, A', 'Reynolds, B', 'Fisher, C', 'Ellis, D', 'Harrison, E', 'Gibson, F', 'McDonald, G', 'Cruz, H'],
+    '195': ['Marshall, A', 'Ortiz, B', 'Gomez, C', 'Murray, D', 'Freeman, E', 'Wells, F', 'Webb, G', 'Stevens, H'],
+    '220': ['Tucker, A', 'Porter, B', 'Hunter, C', 'Hicks, D', 'Crawford, E', 'Henry, F', 'Mendoza, G', 'Boyd, H'],
+    '285': ['Warren, A', 'Ferguson, B', 'Robertson, C', 'Ross, D', 'Morales, E', 'Spencer, F', 'Perry, G', 'Long, H'],
+  };
+
+  data = {};
+
+  weights.forEach(w => {
+    const names = demoNames[w];
+    const n = names.length;
+    const wins = {};
+    const losses = {};
+    const sos = {};
+    const confidence = {};
+    const power_scores = {};
+    const history = {};
+    const common = {};
+    const top_wins = {};
+    const bad_losses = {};
+
+    names.forEach((name, i) => {
+      wins[name] = [];
+      losses[name] = [];
+      sos[name] = Math.round(40 + Math.random() * 55);
+      confidence[name] = Math.round(55 + Math.random() * 40);
+      power_scores[name] = parseFloat((60 + Math.random() * 35 - i * 3.5 + Math.random() * 4).toFixed(1));
+      history[name] = { wins: [], losses: [] };
+      top_wins[name] = [];
+      bad_losses[name] = [];
+      common[name] = {};
+    });
+
+    // Simulate wins/losses
+    names.forEach((a, i) => {
+      names.forEach((b, j) => {
+        if (i === j) return;
+        common[a][b] = [];
+        if (i < j && Math.random() > 0.4) {
+          // a beats b
+          history[a].wins.push(b);
+          history[b].losses.push(a);
+          if (i < 3) top_wins[a].push(b);
+        } else if (i > j && Math.random() > 0.55) {
+          history[b].wins.push(a);
+          history[a].losses.push(b);
+          if (j === 0) bad_losses[a].push(b);
+        }
+      });
+    });
+
+    // Common opponents
+    names.forEach((a, i) => {
+      names.forEach((b, j) => {
+        if (i >= j) return;
+        if (Math.random() > 0.4) {
+          const opp = 'Opponent ' + Math.ceil(Math.random() * 10);
+          const w1 = Math.random() > 0.5 ? 'W' : 'L';
+          const w2 = Math.random() > 0.5 ? 'W' : 'L';
+          common[a][b].push({ opponent: opp, w1, w2 });
+          common[b][a] = common[a][b].map(c => ({ opponent: c.opponent, w1: c.w2, w2: c.w1 }));
+        }
+      });
+    });
+
+    const sorted = [...names].sort((a, b) => power_scores[b] - power_scores[a]);
+
+    const debateQueue = [];
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const diff = power_scores[sorted[i]] - power_scores[sorted[i+1]];
+      if (diff < 5) {
+        debateQueue.push({ higher: sorted[i], lower: sorted[i+1], reason: 'Close power scores' });
+      }
+    }
+
+    data[w] = {
+      seeds: sorted.map((name, i) => [i + 1, name]),
+      confidence,
+      power_scores,
+      sos,
+      history,
+      common,
+      top_wins,
+      bad_losses,
+      controversy_flags: debateQueue.length > 0 ? [`Seed 1 vs Seed 2 close — ${debateQueue[0].higher} vs ${debateQueue[0].lower}`] : [],
+      upset_alerts: power_scores[sorted[1]] > power_scores[sorted[0]] - 3 ? [`${sorted[1]} within striking range of ${sorted[0]}`] : [],
+      debate_queue: debateQueue,
+    };
+  });
+
+  onDataLoaded();
+  toast('✓ Demo data loaded — 10 weight classes');
+}
+
+// ── UPLOAD ──
+async function upload() {
+  const f = document.getElementById("file").files[0];
+  if (!f) { toast('⚠ Choose a file first'); return; }
+  toast('⏳ Processing...');
   const fd = new FormData();
   fd.append("file", f);
-
-  const res = await fetch(API + "/upload/", { method: "POST", body: fd });
-  const json = await res.json();
-
-  if (json.error) {
-    alert(json.error);
-    return;
+  try {
+    const res = await fetch(API + "/upload/", { method: "POST", body: fd });
+    const json = await res.json();
+    if (json.error) { toast('✗ ' + json.error); return; }
+    data = json;
+    onDataLoaded();
+    toast('✓ Data loaded successfully');
+  } catch(e) {
+    toast('✗ Connection error — check backend');
   }
-
-  data = json;
-  renderWeights();
-  document.getElementById("main").innerHTML = "";
-  document.getElementById("details").innerHTML = `<h3>Meeting Ready</h3><div class="muted">Select a weight to begin.</div>`;
 }
 
-// ---------------- WEIGHTS
-function renderWeights(){
-  let html = "<b>Select Weight:</b><br>";
+// ── ON DATA LOADED ──
+function onDataLoaded() {
+  document.getElementById('hero-section').style.display = 'none';
+
+  const wBar = document.getElementById('weights-bar');
+  wBar.classList.add('visible');
+  const tabs = document.getElementById('weight-tabs');
+  tabs.innerHTML = '';
   for (const w in data) {
-    html += `<button onclick="selectWeight('${w}')">${w}</button>`;
+    const btn = document.createElement('button');
+    btn.className = 'weight-tab';
+    btn.textContent = w + ' lbs';
+    btn.onclick = () => selectWeight(w);
+    tabs.appendChild(btn);
   }
-  document.getElementById("weights").innerHTML = html;
+
+  // Stats
+  const totalWrestlers = Object.values(data).reduce((a, v) => a + v.seeds.length, 0);
+  document.getElementById('stat-weights').textContent = Object.keys(data).length;
+  document.getElementById('stat-wrestlers').textContent = totalWrestlers;
+  document.getElementById('stat-locked').textContent = '0';
+  document.getElementById('stat-debates').textContent =
+    Object.values(data).reduce((a, v) => a + (v.debate_queue?.length || 0), 0);
+  document.getElementById('stats-bar').classList.add('visible');
+
+  document.getElementById('toolbar').classList.add('visible');
+  selectWeight(Object.keys(data)[0]);
 }
 
-// ---------------- SELECT WEIGHT
-async function selectWeight(w){
+// ── SELECT WEIGHT ──
+async function selectWeight(w) {
   currentWeight = w;
+  selectedRow = null;
 
-  await fetch(API + `/session/${w}`, { method: "POST" });
+  // Update tabs
+  document.querySelectorAll('.weight-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.trim() === w + ' lbs');
+  });
 
   if (!lockedSeeds[w]) {
     lockedSeeds[w] = data[w].seeds.map(s => s[1]);
   }
 
-  renderWeight();
+  try {
+    await fetch(API + `/session/${w}`, { method: "POST" });
+  } catch(e) {}
+
+  renderSeedPanel();
   renderSidebarSummary();
 }
 
-// ---------------- TIER
-function getTier(c){
-  if (c >= 85) return "lock";
-  if (c >= 65) return "lean";
-  return "debate";
+// ── TIER ──
+function getTier(c) {
+  if (c >= 85) return 'lock';
+  if (c >= 65) return 'lean';
+  return 'debate';
 }
 
-// ---------------- RENDER WEIGHT
-function renderWeight(){
+function getTierLabel(c) {
+  if (c >= 85) return '🔒 LOCK';
+  if (c >= 65) return '↗ LEAN';
+  return '⚡ DEBATE';
+}
+
+// ── RENDER SEED PANEL ──
+function renderSeedPanel() {
   const g = data[currentWeight];
   const order = lockedSeeds[currentWeight];
 
-  let html = `<div class="card">
-    <h2>Weight ${currentWeight}</h2>
-    <div style="margin-top:10px;">
-      <button onclick="runDebateQueue()">⚠ Debate Queue</button>
-      <button class="dark" onclick="showAutoReview()">Review Flags</button>
-    </div>
+  const lockedCount = order.filter((_, i) => {
+    const c = g.confidence[order[i]] || 0;
+    return c >= 85;
+  }).length;
+
+  document.getElementById('stat-locked').textContent = lockedCount;
+
+  let html = `
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="dot"></span>
+          ${currentWeight} lbs — Seeds
+        </div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">
+          ${order.length} wrestlers
+        </div>
+      </div>
+      <div class="seed-list">
   `;
 
   order.forEach((name, i) => {
     const conf = g.confidence[name] || 0;
     const tier = getTier(conf);
-    const power = (g.power_scores && g.power_scores[name] !== undefined) ? g.power_scores[name].toFixed(1) : "-";
+    const tierLabel = getTierLabel(conf);
+    const power = g.power_scores?.[name]?.toFixed(1) ?? '—';
+    const sos = g.sos[name] ?? '—';
+    const wl = g.history[name];
+    const record = wl ? `${wl.wins.length}-${wl.losses.length}` : '—';
+    const isSelected = selectedRow === i;
 
     html += `
-      <div class="row" onclick="compareIndex(${i})">
-        <div class="left-col">
-          <div>${i + 1}. ${name}</div>
-          <div class="muted">Power ${power}</div>
+      <div class="seed-row seed-${i+1} ${isSelected ? 'selected' : ''}" onclick="handleRowClick(${i})">
+        <div class="seed-num">${i + 1}</div>
+        <div class="seed-info">
+          <div class="seed-name">${name}</div>
+          <div class="seed-meta">
+            <span>${record}</span>
+            <span>PWR ${power}</span>
+          </div>
         </div>
-        <div class="right-col">
-          <div class="${tier}">${conf}%</div>
-          <div class="muted">SOS ${g.sos[name]}</div>
+        <div class="seed-right">
+          <div class="conf-badge conf-${tier}">${tierLabel}</div>
+          <div class="sos-label">SOS ${sos}</div>
         </div>
       </div>
     `;
   });
 
-  html += "</div>";
-  document.getElementById("main").innerHTML = html;
+  html += `</div></div>`;
+  document.getElementById('seed-panel').innerHTML = html;
 }
 
-// ---------------- SIDEBAR SUMMARY
-function renderSidebarSummary(){
+// ── ROW CLICK ──
+function handleRowClick(i) {
+  const order = lockedSeeds[currentWeight];
+  if (i < order.length - 1) {
+    selectedRow = i;
+    renderSeedPanel();
+    runCompare(order[i], order[i + 1]);
+  }
+}
+
+// ── SIDEBAR SUMMARY ──
+function renderSidebarSummary() {
   const g = data[currentWeight];
-  let html = `<h3>Weight ${currentWeight} Summary</h3>`;
+
+  let html = `
+    <div class="panel-header">
+      <div class="panel-title"><span class="dot"></span>Weight ${currentWeight} Overview</div>
+    </div>
+  `;
 
   if (g.controversy_flags?.length) {
-    html += `<div class="alert"><b>Controversy Flags</b><br>${g.controversy_flags.join("<br>")}</div>`;
+    html += `<div class="flag-alert flag-red">
+      <div class="flag-title">⚠ Controversy Flags</div>
+      ${g.controversy_flags.join('<br>')}
+    </div>`;
   }
 
   if (g.upset_alerts?.length) {
-    html += `<div class="good"><b>Upset Alerts</b><br>${g.upset_alerts.join("<br>")}</div>`;
+    html += `<div class="flag-alert flag-green">
+      <div class="flag-title">⚡ Upset Alerts</div>
+      ${g.upset_alerts.join('<br>')}
+    </div>`;
   }
 
-  html += `<div class="muted">Select adjacent seeds to compare, vote, and finalize.</div>`;
+  if (g.debate_queue?.length) {
+    html += `<div style="padding:14px 18px;">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Debate Queue</div>`;
+    g.debate_queue.forEach(d => {
+      html += `<div style="padding:8px 10px;background:var(--surface2);border-radius:6px;margin-bottom:6px;font-size:12px;border:1px solid var(--border);">
+        <span style="color:var(--text);font-weight:600;">${d.higher}</span>
+        <span style="color:var(--muted);margin:0 6px;">vs</span>
+        <span style="color:var(--text);font-weight:600;">${d.lower}</span>
+        <div style="color:var(--muted);font-size:11px;margin-top:3px;">${d.reason}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
 
-  document.getElementById("details").innerHTML = html;
+  html += `<div class="detail-empty" style="padding:24px;">
+    <div class="detail-empty-sub">Click any seed row to compare it with the next seed →</div>
+  </div>`;
+
+  document.getElementById('details').innerHTML = html;
 }
 
-// ---------------- COMPARE INDEX
-function compareIndex(i){
-  const order = lockedSeeds[currentWeight];
-  if (i === order.length - 1) return;
-  runCompare(order[i], order[i + 1]);
-}
+// ── RUN COMPARE ──
+async function runCompare(a, b) {
+  if (voteInterval) clearInterval(voteInterval);
 
-// ---------------- RUN COMPARE
-async function runCompare(a, b){
-  currentCompare = { a, b };
-
-  await fetch(API + `/session/${currentWeight}/matchup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ a, b })
-  });
+  try {
+    await fetch(API + `/session/${currentWeight}/matchup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ a, b })
+    });
+  } catch(e) {}
 
   const g = data[currentWeight];
   const h = g.history;
-  const common = g.common[a][b] || [];
-
+  const common = g.common?.[a]?.[b] || [];
   const topA = g.top_wins[a] || [];
   const topB = g.top_wins[b] || [];
   const badA = g.bad_losses[a] || [];
   const badB = g.bad_losses[b] || [];
 
   let adv = 0;
+  let breakdown = { head: 0, record: 0, common: 0, sos: 0, top: 0, bad: 0 };
   let reasons = [];
-  let breakdown = {
-    head: 0,
-    record: 0,
-    common: 0,
-    sos: 0,
-    top: 0,
-    bad: 0
-  };
 
-  // head-to-head
-  if (h[a].wins.includes(b)) {
-    adv += 5;
-    breakdown.head = 5;
-    reasons.push(`${a} beat ${b}`);
-  } else if (h[b].wins.includes(a)) {
-    adv -= 5;
-    breakdown.head = -5;
-    reasons.push(`${b} beat ${a}`);
-  }
+  // Head-to-head
+  if (h[a].wins.includes(b)) { adv += 5; breakdown.head = 5; reasons.push(`${a} won head-to-head`); }
+  else if (h[b].wins.includes(a)) { adv -= 5; breakdown.head = -5; reasons.push(`${b} won head-to-head`); }
 
-  // record
+  // Record
   const r1 = h[a].wins.length - h[a].losses.length;
   const r2 = h[b].wins.length - h[b].losses.length;
-  if (r1 > r2) {
-    adv += 2;
-    breakdown.record = 2;
-    reasons.push(`${a} better record`);
-  } else if (r2 > r1) {
-    adv -= 2;
-    breakdown.record = -2;
-    reasons.push(`${b} better record`);
-  }
+  if (r1 > r2) { adv += 2; breakdown.record = 2; reasons.push(`${a} has better record`); }
+  else if (r2 > r1) { adv -= 2; breakdown.record = -2; reasons.push(`${b} has better record`); }
 
-  // common opponents
+  // Common opponents
   common.forEach(c => {
-    if (c.w1 === "W" && c.w2 === "L") {
-      adv += 2;
-      breakdown.common += 2;
-      reasons.push(`${a} better vs ${c.opponent}`);
-    }
-    if (c.w2 === "W" && c.w1 === "L") {
-      adv -= 2;
-      breakdown.common -= 2;
-      reasons.push(`${b} better vs ${c.opponent}`);
-    }
+    if (c.w1 === 'W' && c.w2 === 'L') { adv += 2; breakdown.common += 2; reasons.push(`${a} beat ${c.opponent} (${b} lost)`); }
+    if (c.w2 === 'W' && c.w1 === 'L') { adv -= 2; breakdown.common -= 2; reasons.push(`${b} beat ${c.opponent} (${a} lost)`); }
   });
 
-  // sos
+  // SOS
   const diff = g.sos[a] - g.sos[b];
-  if (diff > 0) {
-    adv += 1;
-    breakdown.sos = 1;
-    reasons.push(`${a} stronger schedule`);
-  }
-  if (diff < 0) {
-    adv -= 1;
-    breakdown.sos = -1;
-    reasons.push(`${b} stronger schedule`);
-  }
+  if (diff > 0) { adv += 1; breakdown.sos = 1; reasons.push(`${a} has stronger schedule`); }
+  else if (diff < 0) { adv -= 1; breakdown.sos = -1; reasons.push(`${b} has stronger schedule`); }
 
-  // top wins
-  if (topA.length > topB.length) {
-    adv += 1;
-    breakdown.top = 1;
-    reasons.push(`${a} more top wins`);
-  } else if (topB.length > topA.length) {
-    adv -= 1;
-    breakdown.top = -1;
-    reasons.push(`${b} more top wins`);
-  }
+  // Top wins
+  if (topA.length > topB.length) { adv += 1; breakdown.top = 1; reasons.push(`${a} has more top wins`); }
+  else if (topB.length > topA.length) { adv -= 1; breakdown.top = -1; reasons.push(`${b} has more top wins`); }
 
-  // bad losses
-  if (badA.length < badB.length) {
-    adv += 1;
-    breakdown.bad = 1;
-    reasons.push(`${a} fewer bad losses`);
-  } else if (badB.length < badA.length) {
-    adv -= 1;
-    breakdown.bad = -1;
-    reasons.push(`${b} fewer bad losses`);
-  }
+  // Bad losses
+  if (badA.length < badB.length) { adv += 1; breakdown.bad = 1; reasons.push(`${a} has fewer bad losses`); }
+  else if (badB.length < badA.length) { adv -= 1; breakdown.bad = -1; reasons.push(`${b} has fewer bad losses`); }
 
-  const winner = adv > 0 ? a : adv < 0 ? b : "Too close";
+  const winner = adv > 0 ? a : adv < 0 ? b : null;
+  const recA = `${h[a].wins.length}-${h[a].losses.length}`;
+  const recB = `${h[b].wins.length}-${h[b].losses.length}`;
 
-  document.getElementById("details").innerHTML = `
-    <h2>${a} vs ${b}</h2>
+  // Score bar data
+  const maxScore = 12;
+  const bars = [
+    { label: 'Head-to-Head', val: breakdown.head, max: 5 },
+    { label: 'Season Record', val: breakdown.record, max: 2 },
+    { label: 'Common Opponents', val: breakdown.common, max: 6 },
+    { label: 'Strength of Schedule', val: breakdown.sos, max: 1 },
+    { label: 'Top Wins', val: breakdown.top, max: 1 },
+    { label: 'Bad Losses', val: breakdown.bad, max: 1 },
+  ];
 
-    <div class="badge">${a}: ${h[a].wins.length}-${h[a].losses.length}</div>
-    <div class="badge">${b}: ${h[b].wins.length}-${h[b].losses.length}</div>
-    <div class="badge">SOS ${a}: ${g.sos[a]}</div>
-    <div class="badge">SOS ${b}: ${g.sos[b]}</div>
+  let barsHtml = '';
+  bars.forEach(bar => {
+    const pct = bar.max > 0 ? Math.min(100, Math.abs(bar.val) / bar.max * 100) : 0;
+    const cls = bar.val > 0 ? 'bar-positive' : bar.val < 0 ? 'bar-negative' : 'bar-neutral';
+    const valLabel = bar.val > 0 ? `+${bar.val} → ${a.split(',')[0]}` : bar.val < 0 ? `${bar.val} → ${b.split(',')[0]}` : 'Even';
+    barsHtml += `
+      <div class="score-bar-row">
+        <div class="score-bar-label">
+          <span class="score-bar-name">${bar.label}</span>
+          <span class="score-bar-val">${valLabel}</span>
+        </div>
+        <div class="score-bar-track">
+          <div class="score-bar-fill ${cls}" style="width:${pct}%"></div>
+        </div>
+      </div>
+    `;
+  });
 
-    <hr>
+  // Common opponents table
+  let commonHtml = common.length
+    ? common.map(c => `
+        <div class="common-row">
+          <div class="common-opp">${c.opponent}</div>
+          <span class="result-badge result-${c.w1.toLowerCase()}">${a.split(',')[0]}: ${c.w1}</span>
+          <span class="result-badge result-${c.w2.toLowerCase()}">${b.split(',')[0]}: ${c.w2}</span>
+        </div>`)
+      .join('')
+    : '<div style="color:var(--muted);font-size:13px;padding:6px 0;">No common opponents found</div>';
 
-    <b>Key Factors</b><br>
-    ${reasons.length ? reasons.join("<br>") : "No strong separator found"}
+  const html = `
+    <div class="fade-in">
+      <div class="compare-header">
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">▸ Seed Comparison</div>
+        <div class="compare-vs">
+          <div class="compare-wrestler ${adv > 0 ? 'winner' : ''}">
+            <div class="compare-wrestler-name">${a}</div>
+            <div class="compare-record">${recA} · SOS ${g.sos[a]}</div>
+          </div>
+          <div class="vs-badge">VS</div>
+          <div class="compare-wrestler ${adv < 0 ? 'winner' : ''}">
+            <div class="compare-wrestler-name">${b}</div>
+            <div class="compare-record">${recB} · SOS ${g.sos[b]}</div>
+          </div>
+        </div>
+      </div>
 
-    <hr>
+      ${winner ? `
+      <div class="recommend-banner">
+        <div class="recommend-icon">🏆</div>
+        <div>
+          <div class="recommend-label">Algorithm Recommends</div>
+          <div class="recommend-name">${winner}</div>
+        </div>
+      </div>
+      ` : `
+      <div style="margin:14px 18px;padding:14px 16px;border-radius:8px;background:rgba(100,116,139,0.1);border:1px solid var(--border2);">
+        <div style="font-family:var(--font-display);font-weight:700;color:var(--muted2);">⚖ TOO CLOSE TO CALL — Coach vote recommended</div>
+      </div>
+      `}
 
-    <b>Why Score</b><br>
-    Head-to-head: ${breakdown.head}<br>
-    Record: ${breakdown.record}<br>
-    Common opponents: ${breakdown.common}<br>
-    SOS: ${breakdown.sos}<br>
-    Top wins: ${breakdown.top}<br>
-    Bad losses: ${breakdown.bad}<br>
+      <div class="score-section">
+        <div class="score-section-title">▸ Scoring Breakdown</div>
+        ${barsHtml}
+      </div>
 
-    <hr>
+      ${reasons.length ? `
+      <div class="score-section">
+        <div class="score-section-title">▸ Key Factors</div>
+        ${reasons.map(r => `<div style="font-size:13px;color:var(--muted2);padding:3px 0;border-bottom:1px solid var(--border);">→ ${r}</div>`).join('')}
+      </div>` : ''}
 
-    <b>🔥 Top Wins</b><br>
-    ${a}: ${topA.join(", ") || "None"}<br>
-    ${b}: ${topB.join(", ") || "None"}<br><br>
+      <div class="wl-grid">
+        <div class="wl-box">
+          <div class="wl-box-title">🏅 Top Wins</div>
+          <div class="wl-name">${a.split(',')[0]}</div>
+          <div class="wl-items">${topA.join(', ') || 'None recorded'}</div>
+          <div class="wl-name" style="margin-top:8px;">${b.split(',')[0]}</div>
+          <div class="wl-items">${topB.join(', ') || 'None recorded'}</div>
+        </div>
+        <div class="wl-box">
+          <div class="wl-box-title">⚠ Bad Losses</div>
+          <div class="wl-name">${a.split(',')[0]}</div>
+          <div class="wl-items" style="color:${badA.length ? '#fca5a5' : 'var(--muted)'};">${badA.join(', ') || 'None'}</div>
+          <div class="wl-name" style="margin-top:8px;">${b.split(',')[0]}</div>
+          <div class="wl-items" style="color:${badB.length ? '#fca5a5' : 'var(--muted)'};">${badB.join(', ') || 'None'}</div>
+        </div>
+      </div>
 
-    <b>⚠️ Bad Losses</b><br>
-    ${a}: ${badA.join(", ") || "None"}<br>
-    ${b}: ${badB.join(", ") || "None"}<br>
+      <div class="common-section">
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">▸ Common Opponents (${common.length})</div>
+        ${commonHtml}
+      </div>
 
-    <hr>
+      <div class="vote-section">
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;"><span class="live-dot"></span>Live Coach Voting</div>
+        <div class="vote-inputs">
+          <input type="text" id="voterName" class="vote-input" placeholder="Coach name">
+          <select id="voterRole" class="vote-select">
+            <option value="coach">Coach</option>
+            <option value="head_coach">Head Coach</option>
+          </select>
+        </div>
+        <div class="vote-buttons">
+          <button class="vote-btn" onclick="vote('${a}')">Vote ${a.split(',')[0]}</button>
+          <button class="vote-btn" onclick="vote('${b}')">Vote ${b.split(',')[0]}</button>
+        </div>
+        <div id="votes-live"></div>
+      </div>
 
-    <b>Common Opponents</b><br>
-    ${common.length ? common.map(c => `${c.opponent}: ${a}(${c.w1}) vs ${b}(${c.w2})`).join("<br>") : "None"}
-
-    <div class="big">🏆 Recommended: ${winner}</div>
-
-    <div class="input-row">
-      <input type="text" id="voterName" placeholder="Coach name">
-      <select id="voterRole">
-        <option value="coach">Coach</option>
-        <option value="head_coach">Head Coach</option>
-      </select>
+      <div class="detail-actions">
+        <button class="btn btn-secondary btn-sm" onclick="swap('${a}','${b}')">⇅ Swap Seeds</button>
+        <button class="btn btn-ghost btn-sm" onclick="renderSidebarSummary()">✕ Close</button>
+      </div>
     </div>
-
-    <button onclick="vote('${a}')">Vote ${a}</button>
-    <button onclick="vote('${b}')">Vote ${b}</button>
-    <div id="votes"></div>
-
-    <button class="secondary" onclick="swap('${a}','${b}')">Swap Seeds</button>
   `;
 
+  document.getElementById('details').innerHTML = html;
   pollVotes();
 }
 
-// ---------------- VOTE
-async function vote(name){
+// ── VOTE ──
+async function vote(name) {
   const voter = document.getElementById("voterName")?.value?.trim() || "Anonymous";
   const role = document.getElementById("voterRole")?.value || "coach";
-
-  await fetch(API + `/vote/${currentWeight}`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ name, voter, role })
-  });
+  try {
+    await fetch(API + `/vote/${currentWeight}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, voter, role })
+    });
+    toast(`✓ Vote cast for ${name.split(',')[0]}`);
+  } catch(e) {}
 }
 
-// ---------------- POLL VOTES
-function pollVotes(){
+// ── POLL VOTES ──
+function pollVotes() {
   if (voteInterval) clearInterval(voteInterval);
-
   voteInterval = setInterval(async () => {
-    const res = await fetch(API + `/votes/${currentWeight}`);
-    const v = await res.json();
-
-    let html = "<b>Live Votes</b><br>";
-    for (const k in v.votes) {
-      html += `${k}: ${v.votes[k]}<br>`;
-    }
-
-    if (v.voters && Object.keys(v.voters).length) {
-      html += "<br><b>Voters</b><br>";
-      for (const voter in v.voters) {
-        const info = v.voters[voter];
-        html += `${voter} → ${info.name} (${info.role})<br>`;
+    try {
+      const res = await fetch(API + `/votes/${currentWeight}`);
+      const v = await res.json();
+      const box = document.getElementById("votes-live");
+      if (!box) { clearInterval(voteInterval); return; }
+      let html = '';
+      const totalVotes = Object.values(v.votes || {}).reduce((a, c) => a + c, 0);
+      for (const k in (v.votes || {})) {
+        const pct = totalVotes > 0 ? Math.round(v.votes[k] / totalVotes * 100) : 0;
+        html += `<div style="margin-bottom:6px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+            <span style="color:var(--text);">${k.split(',')[0]}</span>
+            <span style="color:var(--gold);font-family:var(--font-mono);">${v.votes[k]} votes (${pct}%)</span>
+          </div>
+          <div style="height:4px;background:var(--surface2);border-radius:999px;">
+            <div style="height:4px;background:var(--gold);border-radius:999px;width:${pct}%;transition:width 0.4s;"></div>
+          </div>
+        </div>`;
       }
-    }
-
-    const voteBox = document.getElementById("votes");
-    if (voteBox) voteBox.innerHTML = html;
+      box.innerHTML = html || '<span style="color:var(--muted);font-size:12px;">No votes yet</span>';
+    } catch(e) {}
   }, 2000);
 }
 
-// ---------------- SWAP
-function swap(a, b){
+// ── SWAP ──
+function swap(a, b) {
   const arr = lockedSeeds[currentWeight];
   const i = arr.indexOf(a);
   const j = arr.indexOf(b);
   [arr[i], arr[j]] = [arr[j], arr[i]];
-  renderWeight();
+  renderSeedPanel();
+  toast(`⇅ Seeds swapped: ${a.split(',')[0]} ↔ ${b.split(',')[0]}`);
 }
 
-// ---------------- DEBATE QUEUE
-function runDebateQueue(){
+// ── DEBATE QUEUE ──
+function runDebateQueue() {
   const g = data[currentWeight];
   const q = g.debate_queue || [];
-
-  if (!q.length) {
-    alert("No major debates");
-    return;
-  }
-
+  if (!q.length) { toast('✓ No active debates for this weight'); return; }
   const first = q[0];
+  const i = lockedSeeds[currentWeight].indexOf(first.higher);
+  selectedRow = i;
+  renderSeedPanel();
   runCompare(first.higher, first.lower);
+  toast(`⚡ Loading debate: ${first.higher.split(',')[0]} vs ${first.lower.split(',')[0]}`);
 }
 
-// ---------------- REVIEW FLAGS
-function showAutoReview(){
+// ── REVIEW FLAGS ──
+function showAutoReview() {
   const g = data[currentWeight];
-
-  let html = `<h3>Weight ${currentWeight} Review</h3>`;
+  let html = `
+    <div class="panel-header">
+      <div class="panel-title"><span class="dot"></span>Review Flags — ${currentWeight} lbs</div>
+    </div>
+    <div style="padding:14px 18px;">
+  `;
 
   if (g.controversy_flags?.length) {
-    html += `<div class="alert"><b>Controversy Flags</b><br>${g.controversy_flags.join("<br>")}</div>`;
+    html += `<div class="flag-alert flag-red" style="margin:0 0 10px 0;">
+      <div class="flag-title">⚠ Controversy Flags</div>
+      ${g.controversy_flags.join('<br>')}
+    </div>`;
   }
 
   if (g.upset_alerts?.length) {
-    html += `<div class="good"><b>Upset Alerts</b><br>${g.upset_alerts.join("<br>")}</div>`;
+    html += `<div class="flag-alert flag-green" style="margin:0 0 10px 0;">
+      <div class="flag-title">⚡ Upset Alerts</div>
+      ${g.upset_alerts.join('<br>')}
+    </div>`;
   }
 
   if (g.debate_queue?.length) {
-    html += `<b>Debate Queue</b><br>`;
-    html += g.debate_queue.map(x => `${x.higher} vs ${x.lower} — ${x.reason}`).join("<br>");
+    html += `<div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Debate Queue</div>`;
+    g.debate_queue.forEach(d => {
+      html += `<div onclick="runCompare('${d.higher}','${d.lower}')" style="cursor:pointer;padding:10px 12px;background:var(--surface2);border-radius:6px;margin-bottom:6px;border:1px solid var(--border);transition:border-color 0.15s;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--text);">${d.higher} <span style="color:var(--muted);">vs</span> ${d.lower}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;">${d.reason}</div>
+      </div>`;
+    });
   }
 
-  document.getElementById("details").innerHTML = html;
+  if (!g.controversy_flags?.length && !g.upset_alerts?.length && !g.debate_queue?.length) {
+    html += `<div style="text-align:center;padding:24px 0;color:var(--muted);font-family:var(--font-display);font-weight:700;letter-spacing:1px;text-transform:uppercase;">✓ No flags for this weight</div>`;
+  }
+
+  html += `</div>`;
+  document.getElementById('details').innerHTML = html;
 }
 
-// ---------------- EXPORT SEEDS
-function exportSeeds(){
-  if (!currentWeight) {
-    alert("Select a weight first");
-    return;
-  }
-
+// ── EXPORT SEEDS ──
+function exportSeeds() {
+  if (!currentWeight) { toast('⚠ Select a weight first'); return; }
   const order = lockedSeeds[currentWeight];
   const rows = ["Seed,Wrestler"];
   order.forEach((w, i) => rows.push(`${i+1},${w}`));
-
-  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `final_seeds_${currentWeight}.csv`;
-  a.click();
+  download(rows.join('\n'), `SeedIT_${currentWeight}lbs_seeds.csv`);
+  toast(`⬇ Seeds exported for ${currentWeight} lbs`);
 }
 
-// ---------------- EXPORT REPORT
-function exportMeetingReport(){
-  if (!currentWeight) {
-    alert("Select a weight first");
-    return;
-  }
-
+// ── EXPORT REPORT ──
+function exportMeetingReport() {
+  if (!currentWeight) { toast('⚠ Select a weight first'); return; }
   const g = data[currentWeight];
   const order = lockedSeeds[currentWeight];
-
-  let rows = [
-    "Weight,Seed,Wrestler,Confidence,SOS,TopWins,BadLosses,PowerScore"
-  ];
-
+  let rows = ["Weight,Seed,Wrestler,Confidence,SOS,TopWins,BadLosses,PowerScore"];
   order.forEach((name, i) => {
     rows.push([
-      currentWeight,
-      i + 1,
-      name,
-      g.confidence[name] || "",
-      g.sos[name] || "",
-      `"${(g.top_wins[name] || []).join("; ")}"`,
-      `"${(g.bad_losses[name] || []).join("; ")}"`,
-      g.power_scores[name] || ""
-    ].join(","));
+      currentWeight, i+1, name,
+      g.confidence[name] || '',
+      g.sos[name] || '',
+      `"${(g.top_wins[name] || []).join('; ')}"`,
+      `"${(g.bad_losses[name] || []).join('; ')}"`,
+      g.power_scores?.[name] || ''
+    ].join(','));
   });
-
-  rows.push("");
-  rows.push("Controversy Flags");
+  rows.push('');
+  rows.push('Controversy Flags');
   (g.controversy_flags || []).forEach(x => rows.push(`"${x}"`));
-
-  rows.push("");
-  rows.push("Upset Alerts");
+  rows.push('');
+  rows.push('Upset Alerts');
   (g.upset_alerts || []).forEach(x => rows.push(`"${x}"`));
+  download(rows.join('\n'), `SeedIT_${currentWeight}lbs_report.csv`);
+  toast('📋 Meeting report exported');
+}
 
-  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+// ── DOWNLOAD HELPER ──
+function download(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `meeting_report_${currentWeight}.csv`;
-  a.click();
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 </script>
 
