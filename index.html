@@ -968,6 +968,27 @@ header { padding: 14px 0 0; }
 .compare-vs { grid-template-columns: 1fr; }
 .vs-badge { display: none; }
 }
+
+.import-tab {
+padding: 9px 18px;
+border-radius: 7px;
+border: 1px solid var(–border2);
+background: var(–surface);
+color: var(–muted2);
+font-family: var(–font-display);
+font-size: 14px;
+font-weight: 700;
+letter-spacing: 1px;
+text-transform: uppercase;
+cursor: pointer;
+transition: all 0.15s;
+}
+.import-tab:hover { border-color: var(–gold); color: var(–gold); }
+.import-tab.active { background: var(–gold); color: #080c14; border-color: var(–gold); }
+.tw-log-ok { color: var(–green); }
+.tw-log-err { color: var(–red); }
+.tw-log-info { color: var(–muted2); }
+.tw-log-warn { color: var(–amber); }
 </style>
 
 </head>
@@ -1007,20 +1028,77 @@ header { padding: 14px 0 0; }
     </div>
 
 ```
-<div class="upload-zone" id="upload-zone"
-  onclick="document.getElementById('file').click()"
-  ondragover="event.preventDefault(); this.classList.add('drag-over')"
-  ondragleave="this.classList.remove('drag-over')"
-  ondrop="handleDrop(event)">
-  <span class="upload-icon">📂</span>
-  <div class="upload-title">Upload Season Data</div>
-  <div class="upload-sub">Drop a CSV file here or click to browse</div>
-  <input type="file" id="file" style="display:none" accept=".csv" onchange="upload()">
+<!-- IMPORT TABS -->
+<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+  <button class="import-tab active" onclick="switchTab('csv')" id="tab-csv">CSV Upload</button>
+  <button class="import-tab" onclick="switchTab('tw')" id="tab-tw">Track Wrestling</button>
+  <button class="import-tab" onclick="switchTab('demo')" id="tab-demo">Demo Data</button>
 </div>
 
-<div style="margin-top: 12px; text-align:center;">
-  <button class="btn btn-primary" onclick="loadDemo()" style="margin-right:8px;">▶ Load Demo Data</button>
-  <button class="btn btn-ghost" onclick="document.getElementById('file').click()">Upload CSV</button>
+<!-- CSV TAB -->
+<div id="panel-csv">
+  <div class="upload-zone" id="upload-zone"
+    onclick="document.getElementById('file').click()"
+    ondragover="event.preventDefault(); this.classList.add('drag-over')"
+    ondragleave="this.classList.remove('drag-over')"
+    ondrop="handleDrop(event)">
+    <span class="upload-icon">📂</span>
+    <div class="upload-title">Upload Season Data</div>
+    <div class="upload-sub">Drop a CSV file here or click to browse</div>
+    <input type="file" id="file" style="display:none" accept=".csv" onchange="upload()">
+  </div>
+  <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">CSV FORMAT</div>
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted2);">weight, wrestlerA, wrestlerB, winner, method</div>
+    <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:4px;">method: fall · pin · tf · tech fall · md · major decision · dec · decision</div>
+  </div>
+</div>
+
+<!-- TRACK WRESTLING TAB -->
+<div id="panel-tw" style="display:none;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden;">
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Track Wrestling Import</div>
+      <div style="font-size:13px;color:var(--muted2);line-height:1.6;">Paste a Track Wrestling tournament URL or ID to automatically pull all match results into the seeding engine.</div>
+    </div>
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">SINGLE TOURNAMENT</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="text" id="tw-input" class="vote-input" style="flex:1;min-width:200px;" placeholder="Paste Track Wrestling URL or tournament ID">
+        <button class="btn btn-primary" onclick="importFromTW()">Import</button>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:8px;">e.g. trackwrestling.com/tw/opentournaments/tournament/displaybrackets.jsp?TID=123456</div>
+    </div>
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">SEASON IMPORT — MULTIPLE TOURNAMENTS</div>
+      <div style="font-size:13px;color:var(--muted2);margin-bottom:10px;">Add multiple URLs or IDs to build a full season dataset across tournaments.</div>
+      <textarea id="tw-multi" class="vote-input" rows="4" style="width:100%;resize:vertical;font-family:var(--font-mono);font-size:12px;line-height:1.8;" placeholder="One URL or ID per line"></textarea>
+      <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="importMultiTW()">Import All Tournaments</button>
+    </div>
+    <div id="tw-log" style="padding:14px 18px;display:none;">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">IMPORT LOG</div>
+      <div id="tw-log-body" style="font-family:var(--font-mono);font-size:12px;line-height:2;max-height:200px;overflow-y:auto;"></div>
+    </div>
+  </div>
+  <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">HOW IT WORKS</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.9;">
+      1. Pulls bracket and match data directly from Track Wrestling<br>
+      2. Extracts wrestler names, weight classes, and results<br>
+      3. Maps win methods: fall, tech fall, major dec, decision<br>
+      4. Feeds directly into the seeding engine
+    </div>
+  </div>
+</div>
+
+<!-- DEMO TAB -->
+<div id="panel-demo" style="display:none;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:28px;text-align:center;">
+    <div style="font-size:44px;margin-bottom:12px;">🏆</div>
+    <div style="font-family:var(--font-display);font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Late Season Demo</div>
+    <div style="font-size:13px;color:var(--muted2);margin-bottom:22px;line-height:1.6;">10 weight classes · 8 wrestlers each<br>Real match results with win methods · Upsets and controversies built in</div>
+    <button class="btn btn-primary" onclick="loadDemo()">Load Demo Data</button>
+  </div>
 </div>
 ```
 
@@ -2348,6 +2426,253 @@ function download(content, filename) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
+
+// ── TAB SWITCHER ──
+function switchTab(tab) {
+  ['csv','tw','demo'].forEach(t => {
+    document.getElementById('panel-' + t).style.display = t === tab ? 'block' : 'none';
+    const btn = document.getElementById('tab-' + t);
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+}
+
+// ── TW LOG HELPERS ──
+function twLog(msg, type) {
+  const log = document.getElementById('tw-log');
+  const body = document.getElementById('tw-log-body');
+  if (!log || !body) return;
+  log.style.display = 'block';
+  const cls = type === 'ok' ? 'tw-log-ok' : type === 'err' ? 'tw-log-err' : type === 'warn' ? 'tw-log-warn' : 'tw-log-info';
+  body.innerHTML += '<div class="' + cls + '">' + msg + '</div>';
+  body.scrollTop = body.scrollHeight;
+}
+
+function twLogClear() {
+  const log = document.getElementById('tw-log');
+  const body = document.getElementById('tw-log-body');
+  if (log) log.style.display = 'none';
+  if (body) body.innerHTML = '';
+}
+
+// ── EXTRACT TOURNAMENT ID FROM URL OR PLAIN ID ──
+function extractTWId(input) {
+  input = input.trim();
+  // Plain numeric ID
+  if (/^\d+$/.test(input)) return input;
+  // TID= param
+  const tid = input.match(/[?&]TID=(\d+)/i);
+  if (tid) return tid[1];
+  // /tournament/12345/
+  const slash = input.match(/\/tournament(?:s)?\/(?:.*?\/)?(\d+)/i);
+  if (slash) return slash[1];
+  // Any long number in URL
+  const num = input.match(/(\d{5,})/);
+  if (num) return num[1];
+  return null;
+}
+
+// ── MAP TW WIN METHOD STRING TO OUR FORMAT ──
+function mapTWMethod(raw) {
+  if (!raw) return 'dec';
+  const s = raw.toLowerCase().trim();
+  if (s.includes('fall') || s.includes('pin') || s === 'f') return 'fall';
+  if (s.includes('tech') || s === 'tf' || s.includes('technical')) return 'tf';
+  if (s.includes('major') || s === 'md' || s === 'maj') return 'md';
+  if (s.includes('dec') || s === 'd' || s.includes('decision')) return 'dec';
+  if (s.includes('default') || s.includes('forfeit') || s.includes('dq')) return 'dec';
+  return 'dec';
+}
+
+// ── FETCH ONE TOURNAMENT FROM OPENTW API ──
+async function fetchTWTournament(tid) {
+  const OPENTW = 'https://opentw-api.vehbi.me';
+  twLog('Fetching tournament ' + tid + '...', 'info');
+
+  // Try brackets endpoint first (has most match data)
+  let brackets = null;
+  try {
+    const res = await fetch(OPENTW + '/tournaments/open/' + tid + '/brackets', {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      brackets = await res.json();
+      twLog('Brackets loaded for tournament ' + tid, 'ok');
+    }
+  } catch(e) {
+    twLog('Brackets endpoint failed, trying matches...', 'warn');
+  }
+
+  // Try matches endpoint
+  let matches = null;
+  try {
+    const res = await fetch(OPENTW + '/tournaments/open/' + tid + '/matches', {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      matches = await res.json();
+      twLog('Matches loaded for tournament ' + tid, 'ok');
+    }
+  } catch(e) {
+    twLog('Matches endpoint also failed', 'warn');
+  }
+
+  return { brackets, matches, tid };
+}
+
+// ── PARSE TW RESPONSE INTO SEEDIT MATCH FORMAT ──
+function parseTWData(twData) {
+  const matchList = [];
+
+  function processMatch(m, weight) {
+    // Different APIs return different shapes — handle both
+    const winnerName = m.winner || m.winnerName || m.winner_name || null;
+    const topName = m.top || m.topWrestler || m.wrestler1 || m.red || null;
+    const botName = m.bottom || m.bottomWrestler || m.wrestler2 || m.green || null;
+    const methodRaw = m.method || m.result || m.win_type || m.winType || m.decision || '';
+    const w = weight || m.weight || m.weightClass || m.weight_class || 'Unknown';
+
+    if (!winnerName || !topName || !botName) return;
+    if (winnerName === 'BYE' || topName === 'BYE' || botName === 'BYE') return;
+
+    const loserName = winnerName === topName ? botName : topName;
+
+    matchList.push({
+      weight: String(w).replace(/[^0-9]/g, '') || w,
+      wrestlerA: winnerName.trim(),
+      wrestlerB: loserName.trim(),
+      winner: winnerName.trim(),
+      method: mapTWMethod(methodRaw)
+    });
+  }
+
+  // Parse brackets structure
+  if (twData.brackets) {
+    const b = twData.brackets;
+    // Array of weight bracket objects
+    const arr = Array.isArray(b) ? b : (b.brackets || b.weightClasses || b.weights || []);
+    arr.forEach(bracket => {
+      const weight = bracket.weight || bracket.weightClass || bracket.name || 'Unknown';
+      const bMatches = bracket.matches || bracket.bouts || bracket.results || [];
+      bMatches.forEach(m => processMatch(m, weight));
+      // Some APIs nest rounds
+      const rounds = bracket.rounds || [];
+      rounds.forEach(round => {
+        const rMatches = round.matches || round.bouts || [];
+        rMatches.forEach(m => processMatch(m, weight));
+      });
+    });
+  }
+
+  // Parse matches structure
+  if (twData.matches) {
+    const m = twData.matches;
+    const arr = Array.isArray(m) ? m : (m.matches || m.bouts || []);
+    arr.forEach(match => processMatch(match, null));
+  }
+
+  return matchList;
+}
+
+// ── SEND MATCHES TO BACKEND ──
+async function sendMatchesToBackend(allMatches) {
+  if (!allMatches.length) {
+    twLog('No valid matches found to process', 'err');
+    return false;
+  }
+  twLog('Sending ' + allMatches.length + ' matches to seeding engine...', 'info');
+  try {
+    const res = await fetch(API + '/upload/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matches: allMatches })
+    });
+    const json = await res.json();
+    if (json.error) {
+      twLog('Backend error: ' + json.error, 'err');
+      return false;
+    }
+    data = json;
+    twLog('Seeds generated successfully', 'ok');
+    return true;
+  } catch(e) {
+    twLog('Backend connection error: ' + e.message, 'err');
+    return false;
+  }
+}
+
+// ── SINGLE TOURNAMENT IMPORT ──
+async function importFromTW() {
+  const input = document.getElementById('tw-input').value.trim();
+  if (!input) { toast('Paste a Track Wrestling URL or ID first'); return; }
+
+  const tid = extractTWId(input);
+  if (!tid) { toast('Could not find a tournament ID in that URL'); return; }
+
+  twLogClear();
+  toast('Importing from Track Wrestling...');
+
+  const twData = await fetchTWTournament(tid);
+  const matches = parseTWData(twData);
+
+  twLog('Found ' + matches.length + ' completed matches', matches.length > 0 ? 'ok' : 'warn');
+
+  if (matches.length === 0) {
+    twLog('No match results found. The tournament may still be in progress, or the API may not have data for this tournament ID.', 'warn');
+    twLog('Try using CSV upload with manually exported data instead.', 'info');
+    toast('No match data found — see import log');
+    return;
+  }
+
+  const weights = [...new Set(matches.map(m => m.weight))];
+  twLog('Weight classes found: ' + weights.join(', '), 'info');
+
+  const ok = await sendMatchesToBackend(matches);
+  if (ok) {
+    onDataLoaded();
+    toast('Track Wrestling import complete');
+  }
+}
+
+// ── MULTI-TOURNAMENT SEASON IMPORT ──
+async function importMultiTW() {
+  const raw = document.getElementById('tw-multi').value.trim();
+  if (!raw) { toast('Enter at least one tournament URL or ID'); return; }
+
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  twLogClear();
+  twLog('Starting season import — ' + lines.length + ' tournament(s)', 'info');
+
+  const allMatches = [];
+
+  for (const line of lines) {
+    const tid = extractTWId(line);
+    if (!tid) {
+      twLog('Could not parse ID from: ' + line, 'warn');
+      continue;
+    }
+    const twData = await fetchTWTournament(tid);
+    const matches = parseTWData(twData);
+    twLog('Tournament ' + tid + ': ' + matches.length + ' matches', matches.length > 0 ? 'ok' : 'warn');
+    allMatches.push(...matches);
+    // Small delay to be respectful to the API
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  twLog('Total matches collected: ' + allMatches.length, 'info');
+
+  if (allMatches.length === 0) {
+    twLog('No match data found across any tournaments.', 'err');
+    toast('No match data found — see import log');
+    return;
+  }
+
+  const ok = await sendMatchesToBackend(allMatches);
+  if (ok) {
+    onDataLoaded();
+    toast('Season import complete — ' + allMatches.length + ' matches loaded');
+  }
+}
+
 </script>
 
 </body>
