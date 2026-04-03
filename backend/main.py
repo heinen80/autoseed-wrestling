@@ -34,6 +34,13 @@ def get_method_points(method):
         return 3.0
     return WIN_METHOD_POINTS.get(str(method).strip().lower(), 3.0)
 
+def _method_label(pts):
+    if pts >= 6: return "Fall"
+    if pts >= 5: return "Tech Fall"
+    if pts >= 4: return "Major Dec"
+    if pts >= 3: return "Decision"
+    return "-"
+
 @app.get("/")
 def root():
     return {"status": "ok"}
@@ -153,13 +160,6 @@ def build_power_scores(history, sos, top_wins, bad_losses):
 def compute_rankings(power_scores):
     return sorted(power_scores.items(), key=lambda x: x[1], reverse=True)
 
-def _method_label(pts):
-    if pts >= 6: return "Fall"
-    if pts >= 5: return "Tech Fall"
-    if pts >= 4: return "Major Dec"
-    if pts >= 3: return "Decision"
-    return "-"
-
 def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=None):
     adv = 0
     reasons = []
@@ -172,18 +172,25 @@ def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=Non
         "top_wins": 0,
         "bad_losses": 0,
     }
+
+    # Head-to-head — highest priority, cannot be overridden by other criteria
+    h2h_winner = None
     if b in history[a]["wins"]:
         method_pts = history[a]["win_methods"].get(b, 3.0)
-        pts = 3 + round(method_pts * 0.75)
+        pts = 6 + round(method_pts * 1.5)
         adv += pts
         breakdown["head_to_head"] = pts
-        reasons.append(f"{a} beat {b} ({_method_label(method_pts)})")
+        h2h_winner = a
+        reasons.append(f"{a} beat {b} ({_method_label(method_pts)}) - head-to-head priority")
     elif a in history[b]["wins"]:
         method_pts = history[b]["win_methods"].get(a, 3.0)
-        pts = 3 + round(method_pts * 0.75)
+        pts = 6 + round(method_pts * 1.5)
         adv -= pts
         breakdown["head_to_head"] = -pts
-        reasons.append(f"{b} beat {a} ({_method_label(method_pts)})")
+        h2h_winner = b
+        reasons.append(f"{b} beat {a} ({_method_label(method_pts)}) - head-to-head priority")
+
+    # Win quality
     aq_a = avg_win_quality(a, history)
     aq_b = avg_win_quality(b, history)
     aq_diff = round(aq_a - aq_b, 2)
@@ -195,6 +202,8 @@ def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=Non
         adv -= 2
         breakdown["win_quality"] = -2
         reasons.append(f"{b} wins by better methods (avg {aq_b:.1f} vs {aq_a:.1f})")
+
+    # Record
     r1 = len(history[a]["wins"]) - len(history[a]["losses"])
     r2 = len(history[b]["wins"]) - len(history[b]["losses"])
     if r1 > r2:
@@ -205,6 +214,8 @@ def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=Non
         adv -= 2
         breakdown["record"] = -2
         reasons.append(f"{b} has better record")
+
+    # Common opponents
     common_rows = []
     shared = set(history[a]["wins"] + history[a]["losses"]) & \
              set(history[b]["wins"] + history[b]["losses"])
@@ -241,6 +252,8 @@ def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=Non
                 adv -= 1
                 breakdown["common"] -= 1
                 reasons.append(f"{b} beat {opp} more impressively ({_method_label(b_pts)} vs {_method_label(a_pts)})")
+
+    # SOS
     diff = sos[a] - sos[b]
     if diff > 0.03:
         adv += 1
@@ -250,6 +263,8 @@ def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=Non
         adv -= 1
         breakdown["sos"] = -1
         reasons.append(f"{b} stronger schedule (SOS {sos[b]:.3f} vs {sos[a]:.3f})")
+
+    # Top wins
     tw_diff = len(top_wins[a]) - len(top_wins[b])
     if tw_diff > 0:
         adv += 1
@@ -259,6 +274,8 @@ def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=Non
         adv -= 1
         breakdown["top_wins"] = -1
         reasons.append(f"{b} more top wins ({len(top_wins[b])} vs {len(top_wins[a])})")
+
+    # Bad losses
     bl_diff = len(bad_losses[a]) - len(bad_losses[b])
     if bl_diff < 0:
         adv += 1
@@ -268,7 +285,9 @@ def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=Non
         adv -= 1
         breakdown["bad_losses"] = -1
         reasons.append(f"{b} fewer bad losses ({len(bad_losses[b])} vs {len(bad_losses[a])})")
-    if adv == 0 and power_scores:
+
+    # Power score tiebreaker - only when no head-to-head exists
+    if h2h_winner is None and adv == 0 and power_scores:
         ps_diff = power_scores.get(a, 0) - power_scores.get(b, 0)
         if ps_diff > 0:
             adv = 1
@@ -276,6 +295,13 @@ def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=Non
         elif ps_diff < 0:
             adv = -1
             reasons.append(f"{b} edges on power score ({power_scores[b]:.1f} vs {power_scores[a]:.1f})")
+
+    # Hard override - head-to-head winner can never lose the comparison
+    if h2h_winner == a and adv <= 0:
+        adv = abs(breakdown["head_to_head"])
+    elif h2h_winner == b and adv >= 0:
+        adv = -abs(breakdown["head_to_head"])
+
     winner = a if adv > 0 else b if adv < 0 else "Too close"
     return {
         "winner": winner,
