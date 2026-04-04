@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,971 +32,969 @@
     --font-mono:    'JetBrains Mono', monospace;
   }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-font-family: var(–font-body);
-background: var(–bg);
-color: var(–text);
-min-height: 100vh;
-overflow-x: hidden;
-}
-
-/* ── NOISE TEXTURE OVERLAY ── */
-body::before {
-content: ‘’;
-position: fixed;
-inset: 0;
-background-image: url(“data:image/svg+xml,%3Csvg viewBox=‘0 0 256 256’ xmlns=‘http://www.w3.org/2000/svg’%3E%3Cfilter id=‘noise’%3E%3CfeTurbulence type=‘fractalNoise’ baseFrequency=‘0.9’ numOctaves=‘4’ stitchTiles=‘stitch’/%3E%3C/filter%3E%3Crect width=‘100%25’ height=‘100%25’ filter=‘url(%23noise)’ opacity=‘0.035’/%3E%3C/svg%3E”);
-pointer-events: none;
-z-index: 9999;
-opacity: 0.4;
-}
-
-/* ── GRID LINES ── */
-body::after {
-content: ‘’;
-position: fixed;
-inset: 0;
-background-image:
-linear-gradient(rgba(245,200,66,0.015) 1px, transparent 1px),
-linear-gradient(90deg, rgba(245,200,66,0.015) 1px, transparent 1px);
-background-size: 40px 40px;
-pointer-events: none;
-z-index: 0;
-}
-
-/* ── LAYOUT ── */
-.shell {
-position: relative;
-z-index: 1;
-max-width: 1280px;
-margin: 0 auto;
-padding: 0 20px 60px;
-}
-
-/* ── HEADER ── */
-header {
-display: flex;
-align-items: center;
-justify-content: space-between;
-padding: 20px 0 0;
-border-bottom: 1px solid var(–border2);
-margin-bottom: 0;
-flex-wrap: wrap;
-gap: 12px;
-}
-
-.logo-area {
-display: flex;
-align-items: center;
-gap: 14px;
-}
-
-.logo-mark {
-width: 44px;
-height: 44px;
-background: var(–gold);
-border-radius: 6px;
-display: flex;
-align-items: center;
-justify-content: center;
-font-family: var(–font-display);
-font-weight: 900;
-font-size: 22px;
-color: #080c14;
-letter-spacing: -1px;
-flex-shrink: 0;
-}
-
-.logo-text {
-font-family: var(–font-display);
-font-weight: 900;
-font-size: 28px;
-letter-spacing: 2px;
-text-transform: uppercase;
-color: var(–text);
-line-height: 1;
-}
-
-.logo-sub {
-font-family: var(–font-mono);
-font-size: 10px;
-color: var(–gold);
-letter-spacing: 3px;
-text-transform: uppercase;
-margin-top: 3px;
-}
-
-.header-actions {
-display: flex;
-gap: 8px;
-flex-wrap: wrap;
-}
-
-/* ── HERO ── */
-.hero {
-padding: 48px 0 40px;
-position: relative;
-}
-
-.hero-eyebrow {
-font-family: var(–font-mono);
-font-size: 11px;
-letter-spacing: 4px;
-text-transform: uppercase;
-color: var(–gold);
-margin-bottom: 14px;
-}
-
-.hero h1 {
-font-family: var(–font-display);
-font-size: clamp(36px, 7vw, 72px);
-font-weight: 900;
-text-transform: uppercase;
-letter-spacing: 1px;
-line-height: 0.95;
-color: var(–text);
-margin-bottom: 20px;
-}
-
-.hero h1 span {
-color: var(–gold);
-display: block;
-}
-
-.hero-desc {
-font-size: 15px;
-color: var(–muted2);
-max-width: 560px;
-line-height: 1.6;
-margin-bottom: 32px;
-}
-
-.pill-list {
-display: flex;
-flex-wrap: wrap;
-gap: 8px;
-margin-bottom: 36px;
-}
-
-.pill {
-display: inline-flex;
-align-items: center;
-gap: 6px;
-padding: 5px 12px;
-border-radius: 999px;
-border: 1px solid var(–border2);
-font-family: var(–font-mono);
-font-size: 11px;
-letter-spacing: 1px;
-color: var(–muted2);
-background: var(–surface);
-}
-
-.pill-dot {
-width: 6px;
-height: 6px;
-border-radius: 50%;
-background: var(–gold);
-}
-
-/* ── UPLOAD ZONE ── */
-.upload-zone {
-border: 2px dashed rgba(245,200,66,0.25);
-border-radius: 12px;
-padding: 36px;
-text-align: center;
-cursor: pointer;
-transition: all 0.2s;
-background: rgba(245,200,66,0.03);
-position: relative;
-overflow: hidden;
-}
-
-.upload-zone:hover, .upload-zone.drag-over {
-border-color: var(–gold);
-background: var(–gold-dim);
-}
-
-.upload-zone::before {
-content: ‘’;
-position: absolute;
-top: -50%;
-left: -50%;
-width: 200%;
-height: 200%;
-background: radial-gradient(ellipse at center, rgba(245,200,66,0.04) 0%, transparent 70%);
-pointer-events: none;
-}
-
-.upload-icon {
-font-size: 36px;
-margin-bottom: 10px;
-display: block;
-}
-
-.upload-title {
-font-family: var(–font-display);
-font-size: 20px;
-font-weight: 700;
-letter-spacing: 1px;
-text-transform: uppercase;
-color: var(–text);
-margin-bottom: 6px;
-}
-
-.upload-sub {
-font-size: 13px;
-color: var(–muted);
-}
-
-/* ── BUTTONS ── */
-.btn {
-display: inline-flex;
-align-items: center;
-gap: 7px;
-padding: 10px 18px;
-border: none;
-border-radius: 7px;
-font-family: var(–font-display);
-font-size: 14px;
-font-weight: 700;
-letter-spacing: 1px;
-text-transform: uppercase;
-cursor: pointer;
-transition: all 0.18s ease;
-white-space: nowrap;
-}
-
-.btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
-.btn:active { transform: translateY(0); }
-
-.btn-primary   { background: var(–gold); color: #080c14; }
-.btn-secondary { background: var(–green); color: #080c14; }
-.btn-ghost     { background: var(–surface2); color: var(–muted2); border: 1px solid var(–border2); }
-.btn-danger    { background: var(–red); color: white; }
-.btn-outline   { background: transparent; color: var(–gold); border: 1px solid rgba(245,200,66,0.4); }
-
-.btn-sm {
-padding: 7px 13px;
-font-size: 12px;
-}
-
-/* ── WEIGHT TABS ── */
-#weights-bar {
-display: none;
-background: var(–surface);
-border: 1px solid var(–border2);
-border-radius: 10px;
-padding: 14px 16px;
-margin: 24px 0;
-}
-
-#weights-bar.visible { display: block; }
-
-.weights-label {
-font-family: var(–font-mono);
-font-size: 10px;
-letter-spacing: 3px;
-text-transform: uppercase;
-color: var(–muted);
-margin-bottom: 10px;
-}
-
-.weight-tabs {
-display: flex;
-flex-wrap: wrap;
-gap: 6px;
-}
-
-.weight-tab {
-padding: 7px 16px;
-border-radius: 6px;
-border: 1px solid var(–border2);
-background: var(–surface2);
-color: var(–muted2);
-font-family: var(–font-display);
-font-size: 15px;
-font-weight: 700;
-letter-spacing: 1px;
-cursor: pointer;
-transition: all 0.15s;
-}
-
-.weight-tab:hover { border-color: var(–gold); color: var(–gold); }
-.weight-tab.active { background: var(–gold); color: #080c14; border-color: var(–gold); }
-
-/* ── MAIN GRID ── */
-.main-grid {
-display: grid;
-grid-template-columns: 1fr;
-gap: 20px;
-}
-
-@media (min-width: 960px) {
-.main-grid {
-grid-template-columns: 1.15fr 0.85fr;
-}
-}
-
-/* ── PANEL ── */
-.panel {
-background: var(–surface);
-border: 1px solid var(–border2);
-border-radius: 12px;
-overflow: hidden;
-}
-
-.panel-header {
-display: flex;
-align-items: center;
-justify-content: space-between;
-padding: 14px 18px;
-border-bottom: 1px solid var(–border);
-background: rgba(255,255,255,0.02);
-flex-wrap: wrap;
-gap: 8px;
-}
-
-.panel-title {
-font-family: var(–font-display);
-font-size: 16px;
-font-weight: 800;
-letter-spacing: 2px;
-text-transform: uppercase;
-color: var(–text);
-display: flex;
-align-items: center;
-gap: 8px;
-}
-
-.panel-title .dot {
-width: 8px;
-height: 8px;
-border-radius: 50%;
-background: var(–gold);
-}
-
-/* ── SEED ROWS ── */
-.seed-list { padding: 6px 0; }
-
-.seed-row {
-display: grid;
-grid-template-columns: 44px 1fr auto;
-align-items: center;
-gap: 10px;
-padding: 10px 16px;
-border-bottom: 1px solid var(–border);
-cursor: pointer;
-transition: background 0.12s;
-position: relative;
-}
-
-.seed-row:last-child { border-bottom: none; }
-.seed-row:hover { background: rgba(255,255,255,0.04); }
-.seed-row.selected { background: var(–gold-dim); border-left: 3px solid var(–gold); }
-
-.seed-num {
-font-family: var(–font-display);
-font-size: 22px;
-font-weight: 900;
-color: var(–muted);
-text-align: center;
-line-height: 1;
-}
-
-.seed-row.selected .seed-num { color: var(–gold); }
-
-.seed-1 .seed-num { color: var(–gold); }
-.seed-2 .seed-num { color: #e2e8f0; }
-.seed-3 .seed-num { color: var(–amber); }
-.seed-4 .seed-num { color: var(–amber); opacity: 0.7; }
-
-.seed-info { min-width: 0; }
-
-.seed-name {
-font-family: var(–font-display);
-font-size: 17px;
-font-weight: 700;
-letter-spacing: 0.5px;
-color: var(–text);
-white-space: nowrap;
-overflow: hidden;
-text-overflow: ellipsis;
-}
-
-.seed-meta {
-display: flex;
-gap: 10px;
-margin-top: 2px;
-font-family: var(–font-mono);
-font-size: 11px;
-color: var(–muted);
-}
-
-.seed-right {
-text-align: right;
-flex-shrink: 0;
-}
-
-.conf-badge {
-display: inline-block;
-padding: 3px 9px;
-border-radius: 5px;
-font-family: var(–font-display);
-font-size: 13px;
-font-weight: 700;
-letter-spacing: 1px;
-margin-bottom: 3px;
-}
-
-.conf-lock   { background: var(–green-dim); color: var(–green); }
-.conf-lean   { background: rgba(245,158,11,0.15); color: var(–amber); }
-.conf-debate { background: var(–red-dim); color: var(–red); }
-
-.sos-label {
-font-family: var(–font-mono);
-font-size: 10px;
-color: var(–muted);
-}
-
-/* ── DETAIL PANEL ── */
-#details {
-position: sticky;
-top: 20px;
-max-height: 90vh;
-overflow-y: auto;
-}
-
-.detail-empty {
-padding: 48px 24px;
-text-align: center;
-}
-
-.detail-empty-icon {
-font-size: 40px;
-margin-bottom: 12px;
-opacity: 0.4;
-}
-
-.detail-empty-text {
-font-family: var(–font-display);
-font-size: 16px;
-font-weight: 700;
-text-transform: uppercase;
-letter-spacing: 2px;
-color: var(–muted);
-}
-
-.detail-empty-sub {
-font-size: 13px;
-color: var(–muted);
-margin-top: 6px;
-}
-
-/* ── COMPARE CARD ── */
-.compare-header {
-padding: 18px 18px 14px;
-border-bottom: 1px solid var(–border);
-}
-
-.compare-vs {
-display: grid;
-grid-template-columns: 1fr auto 1fr;
-align-items: center;
-gap: 10px;
-margin-bottom: 14px;
-}
-
-.compare-wrestler {
-padding: 12px;
-background: var(–surface2);
-border-radius: 8px;
-border: 1px solid var(–border2);
-}
-
-.compare-wrestler.winner {
-border-color: var(–gold);
-background: var(–gold-dim);
-}
-
-.compare-wrestler-name {
-font-family: var(–font-display);
-font-size: 16px;
-font-weight: 800;
-text-transform: uppercase;
-letter-spacing: 1px;
-color: var(–text);
-margin-bottom: 4px;
-}
-
-.compare-record {
-font-family: var(–font-mono);
-font-size: 11px;
-color: var(–muted2);
-}
-
-.vs-badge {
-font-family: var(–font-display);
-font-size: 18px;
-font-weight: 900;
-color: var(–muted);
-letter-spacing: 1px;
-text-align: center;
-}
-
-/* ── SCORE BARS ── */
-.score-section {
-padding: 16px 18px;
-border-bottom: 1px solid var(–border);
-}
-
-.score-section-title {
-font-family: var(–font-mono);
-font-size: 10px;
-letter-spacing: 3px;
-text-transform: uppercase;
-color: var(–muted);
-margin-bottom: 12px;
-}
-
-.score-bar-row {
-margin-bottom: 10px;
-}
-
-.score-bar-label {
-display: flex;
-justify-content: space-between;
-align-items: center;
-margin-bottom: 5px;
-}
-
-.score-bar-name {
-font-size: 12px;
-color: var(–muted2);
-font-family: var(–font-body);
-}
-
-.score-bar-val {
-font-family: var(–font-mono);
-font-size: 11px;
-font-weight: 600;
-color: var(–text);
-}
-
-.score-bar-track {
-height: 6px;
-background: var(–surface2);
-border-radius: 999px;
-overflow: hidden;
-position: relative;
-}
-
-.score-bar-fill {
-height: 100%;
-border-radius: 999px;
-transition: width 0.5s ease;
-}
-
-.bar-positive { background: var(–green); }
-.bar-negative { background: var(–red); }
-.bar-neutral  { background: var(–muted); }
-
-/* ── RECOMMENDATION ── */
-.recommend-banner {
-margin: 14px 18px;
-padding: 14px 16px;
-border-radius: 8px;
-background: var(–gold-dim);
-border: 1px solid rgba(245,200,66,0.3);
-display: flex;
-align-items: center;
-gap: 10px;
-}
-
-.recommend-label {
-font-family: var(–font-mono);
-font-size: 10px;
-letter-spacing: 2px;
-text-transform: uppercase;
-color: var(–gold);
-margin-bottom: 2px;
-}
-
-.recommend-name {
-font-family: var(–font-display);
-font-size: 20px;
-font-weight: 900;
-text-transform: uppercase;
-letter-spacing: 1px;
-color: var(–gold);
-}
-
-.recommend-icon { font-size: 28px; }
-
-/* ── WIN/LOSS TABLE ── */
-.wl-grid {
-display: grid;
-grid-template-columns: 1fr 1fr;
-gap: 10px;
-padding: 14px 18px;
-border-bottom: 1px solid var(–border);
-}
-
-.wl-box {
-background: var(–surface2);
-border-radius: 8px;
-padding: 12px;
-border: 1px solid var(–border);
-}
-
-.wl-box-title {
-font-family: var(–font-mono);
-font-size: 10px;
-letter-spacing: 2px;
-text-transform: uppercase;
-color: var(–muted);
-margin-bottom: 8px;
-}
-
-.wl-name {
-font-family: var(–font-display);
-font-size: 13px;
-font-weight: 700;
-color: var(–muted2);
-margin-bottom: 4px;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-}
-
-.wl-items {
-font-size: 12px;
-color: var(–muted);
-line-height: 1.6;
-}
-
-/* ── COMMON OPPONENTS ── */
-.common-section {
-padding: 14px 18px;
-border-bottom: 1px solid var(–border);
-}
-
-.common-row {
-display: grid;
-grid-template-columns: 1fr auto auto;
-gap: 8px;
-align-items: center;
-padding: 6px 0;
-border-bottom: 1px solid var(–border);
-font-size: 13px;
-}
-
-.common-row:last-child { border-bottom: none; }
-
-.common-opp { color: var(–muted2); }
-
-.result-badge {
-padding: 2px 8px;
-border-radius: 4px;
-font-family: var(–font-mono);
-font-size: 11px;
-font-weight: 600;
-}
-
-.result-w { background: var(–green-dim); color: var(–green); }
-.result-l { background: var(–red-dim); color: var(–red); }
-
-/* ── VOTE SECTION ── */
-.vote-section {
-padding: 14px 18px;
-border-bottom: 1px solid var(–border);
-}
-
-.vote-inputs {
-display: flex;
-gap: 8px;
-margin-bottom: 10px;
-flex-wrap: wrap;
-}
-
-.vote-input {
-flex: 1;
-min-width: 130px;
-padding: 9px 12px;
-background: var(–surface2);
-border: 1px solid var(–border2);
-border-radius: 7px;
-color: var(–text);
-font-family: var(–font-body);
-font-size: 13px;
-outline: none;
-transition: border-color 0.15s;
-}
-
-.vote-input:focus { border-color: var(–gold); }
-
-.vote-select {
-padding: 9px 12px;
-background: var(–surface2);
-border: 1px solid var(–border2);
-border-radius: 7px;
-color: var(–text);
-font-family: var(–font-body);
-font-size: 13px;
-outline: none;
-cursor: pointer;
-}
-
-.vote-buttons {
-display: flex;
-gap: 8px;
-}
-
-.vote-btn {
-flex: 1;
-padding: 10px;
-border: 1px solid var(–border2);
-border-radius: 7px;
-background: var(–surface2);
-color: var(–muted2);
-font-family: var(–font-display);
-font-size: 14px;
-font-weight: 700;
-letter-spacing: 1px;
-text-transform: uppercase;
-cursor: pointer;
-transition: all 0.15s;
-}
-
-.vote-btn:hover {
-border-color: var(–gold);
-color: var(–gold);
-background: var(–gold-dim);
-}
-
-#votes-live {
-margin-top: 10px;
-font-family: var(–font-mono);
-font-size: 12px;
-color: var(–muted2);
-line-height: 1.8;
-}
-
-.votes-live-title {
-font-size: 10px;
-letter-spacing: 2px;
-text-transform: uppercase;
-color: var(–muted);
-margin-bottom: 4px;
-}
-
-.live-dot {
-display: inline-block;
-width: 6px;
-height: 6px;
-border-radius: 50%;
-background: var(–green);
-margin-right: 5px;
-animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-0%, 100% { opacity: 1; }
-50% { opacity: 0.3; }
-}
-
-/* ── SWAP / ACTIONS ── */
-.detail-actions {
-padding: 14px 18px;
-display: flex;
-gap: 8px;
-flex-wrap: wrap;
-}
-
-/* ── FLAGS ── */
-.flag-alert {
-margin: 10px 18px;
-padding: 10px 14px;
-border-radius: 7px;
-font-size: 13px;
-line-height: 1.5;
-}
-
-.flag-red {
-background: var(–red-dim);
-border: 1px solid rgba(239,68,68,0.25);
-color: #fca5a5;
-}
-
-.flag-green {
-background: var(–green-dim);
-border: 1px solid rgba(34,197,94,0.25);
-color: #86efac;
-}
-
-.flag-title {
-font-family: var(–font-mono);
-font-size: 10px;
-letter-spacing: 2px;
-text-transform: uppercase;
-margin-bottom: 5px;
-opacity: 0.7;
-}
-
-/* ── TOOLBAR ── */
-.toolbar {
-display: none;
-background: var(–surface);
-border: 1px solid var(–border2);
-border-radius: 10px;
-padding: 12px 16px;
-margin-bottom: 16px;
-gap: 8px;
-flex-wrap: wrap;
-align-items: center;
-}
-
-.toolbar.visible { display: flex; }
-
-/* ── STATS BAR ── */
-.stats-bar {
-display: none;
-gap: 0;
-background: var(–surface);
-border: 1px solid var(–border2);
-border-radius: 10px;
-overflow: hidden;
-margin-bottom: 20px;
-}
-
-.stats-bar.visible { display: flex; }
-
-.stat-item {
-flex: 1;
-padding: 14px 16px;
-border-right: 1px solid var(–border);
-text-align: center;
-}
-
-.stat-item:last-child { border-right: none; }
-
-.stat-num {
-font-family: var(–font-display);
-font-size: 26px;
-font-weight: 900;
-color: var(–gold);
-line-height: 1;
-margin-bottom: 3px;
-}
-
-.stat-label {
-font-family: var(–font-mono);
-font-size: 9px;
-letter-spacing: 2px;
-text-transform: uppercase;
-color: var(–muted);
-}
-
-/* ── TOAST ── */
-#toast {
-position: fixed;
-bottom: 24px;
-right: 24px;
-background: var(–surface);
-border: 1px solid var(–gold);
-border-radius: 8px;
-padding: 12px 18px;
-font-family: var(–font-display);
-font-size: 14px;
-font-weight: 700;
-letter-spacing: 1px;
-color: var(–gold);
-transform: translateY(80px);
-opacity: 0;
-transition: all 0.3s ease;
-z-index: 1000;
-pointer-events: none;
-}
-
-#toast.show {
-transform: translateY(0);
-opacity: 1;
-}
-
-/* ── FOOTER ── */
-footer {
-margin-top: 60px;
-padding-top: 20px;
-border-top: 1px solid var(–border);
-display: flex;
-justify-content: space-between;
-align-items: center;
-flex-wrap: wrap;
-gap: 10px;
-}
-
-.footer-left {
-font-family: var(–font-mono);
-font-size: 11px;
-color: var(–muted);
-letter-spacing: 1px;
-}
-
-.footer-left span { color: var(–gold); }
-
-/* ── SCROLLBAR ── */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(–border2); border-radius: 999px; }
-
-/* ── ANIMATIONS ── */
-@keyframes fadeUp {
-from { opacity: 0; transform: translateY(12px); }
-to   { opacity: 1; transform: translateY(0); }
-}
-
-.fade-in { animation: fadeUp 0.35s ease forwards; }
-
-/* ── RESPONSIVE ── */
-@media (max-width: 640px) {
-.hero h1 { font-size: 36px; }
-.stats-bar { flex-wrap: wrap; }
-.stat-item { min-width: 50%; }
-header { padding: 14px 0 0; }
-.compare-vs { grid-template-columns: 1fr; }
-.vs-badge { display: none; }
-}
-
-.import-tab {
-padding: 9px 18px;
-border-radius: 7px;
-border: 1px solid var(–border2);
-background: var(–surface);
-color: var(–muted2);
-font-family: var(–font-display);
-font-size: 14px;
-font-weight: 700;
-letter-spacing: 1px;
-text-transform: uppercase;
-cursor: pointer;
-transition: all 0.15s;
-}
-.import-tab:hover { border-color: var(–gold); color: var(–gold); }
-.import-tab.active { background: var(–gold); color: #080c14; border-color: var(–gold); }
-.tw-log-ok { color: var(–green); }
-.tw-log-err { color: var(–red); }
-.tw-log-info { color: var(–muted2); }
-.tw-log-warn { color: var(–amber); }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE TEXTURE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.4;
+  }
+
+  /* ── GRID LINES ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(245,200,66,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,200,66,0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── LAYOUT ── */
+  .shell {
+    position: relative;
+    z-index: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 20px 60px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 0 0;
+    border-bottom: 1px solid var(--border2);
+    margin-bottom: 0;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-mark {
+    width: 44px;
+    height: 44px;
+    background: var(--gold);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 22px;
+    color: #080c14;
+    letter-spacing: -1px;
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 28px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .logo-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--gold);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 48px 0 40px;
+    position: relative;
+  }
+
+  .hero-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 14px;
+  }
+
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 7vw, 72px);
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    line-height: 0.95;
+    color: var(--text);
+    margin-bottom: 20px;
+  }
+
+  .hero h1 span {
+    color: var(--gold);
+    display: block;
+  }
+
+  .hero-desc {
+    font-size: 15px;
+    color: var(--muted2);
+    max-width: 560px;
+    line-height: 1.6;
+    margin-bottom: 32px;
+  }
+
+  .pill-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 36px;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--muted2);
+    background: var(--surface);
+  }
+
+  .pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--gold);
+  }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    border: 2px dashed rgba(245,200,66,0.25);
+    border-radius: 12px;
+    padding: 36px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(245,200,66,0.03);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--gold);
+    background: var(--gold-dim);
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at center, rgba(245,200,66,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .upload-icon {
+    font-size: 36px;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .upload-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .upload-sub {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 7px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+  }
+
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
+  .btn:active { transform: translateY(0); }
+
+  .btn-primary   { background: var(--gold); color: #080c14; }
+  .btn-secondary { background: var(--green); color: #080c14; }
+  .btn-ghost     { background: var(--surface2); color: var(--muted2); border: 1px solid var(--border2); }
+  .btn-danger    { background: var(--red); color: white; }
+  .btn-outline   { background: transparent; color: var(--gold); border: 1px solid rgba(245,200,66,0.4); }
+
+  .btn-sm {
+    padding: 7px 13px;
+    font-size: 12px;
+  }
+
+  /* ── WEIGHT TABS ── */
+  #weights-bar {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 24px 0;
+  }
+
+  #weights-bar.visible { display: block; }
+
+  .weights-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .weight-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .weight-tab {
+    padding: 7px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--muted2);
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .weight-tab:hover { border-color: var(--gold); color: var(--gold); }
+  .weight-tab.active { background: var(--gold); color: #080c14; border-color: var(--gold); }
+
+  /* ── MAIN GRID ── */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  @media (min-width: 960px) {
+    .main-grid {
+      grid-template-columns: 1.15fr 0.85fr;
+    }
+  }
+
+  /* ── PANEL ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .panel-title {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gold);
+  }
+
+  /* ── SEED ROWS ── */
+  .seed-list { padding: 6px 0; }
+
+  .seed-row {
+    display: grid;
+    grid-template-columns: 44px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.12s;
+    position: relative;
+  }
+
+  .seed-row:last-child { border-bottom: none; }
+  .seed-row:hover { background: rgba(255,255,255,0.04); }
+  .seed-row.selected { background: var(--gold-dim); border-left: 3px solid var(--gold); }
+
+  .seed-num {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1;
+  }
+
+  .seed-row.selected .seed-num { color: var(--gold); }
+
+  .seed-1 .seed-num { color: var(--gold); }
+  .seed-2 .seed-num { color: #e2e8f0; }
+  .seed-3 .seed-num { color: var(--amber); }
+  .seed-4 .seed-num { color: var(--amber); opacity: 0.7; }
+
+  .seed-info { min-width: 0; }
+
+  .seed-name {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .seed-meta {
+    display: flex;
+    gap: 10px;
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .seed-right {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .conf-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 3px;
+  }
+
+  .conf-lock   { background: var(--green-dim); color: var(--green); }
+  .conf-lean   { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .conf-debate { background: var(--red-dim); color: var(--red); }
+
+  .sos-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* ── DETAIL PANEL ── */
+  #details {
+    position: sticky;
+    top: 20px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .detail-empty {
+    padding: 48px 24px;
+    text-align: center;
+  }
+
+  .detail-empty-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+  }
+
+  .detail-empty-text {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+  }
+
+  .detail-empty-sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ── COMPARE CARD ── */
+  .compare-header {
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .compare-vs {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .compare-wrestler {
+    padding: 12px;
+    background: var(--surface2);
+    border-radius: 8px;
+    border: 1px solid var(--border2);
+  }
+
+  .compare-wrestler.winner {
+    border-color: var(--gold);
+    background: var(--gold-dim);
+  }
+
+  .compare-wrestler-name {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .compare-record {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted2);
+  }
+
+  .vs-badge {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-align: center;
+  }
+
+  /* ── SCORE BARS ── */
+  .score-section {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .score-section-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .score-bar-row {
+    margin-bottom: 10px;
+  }
+
+  .score-bar-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+
+  .score-bar-name {
+    font-size: 12px;
+    color: var(--muted2);
+    font-family: var(--font-body);
+  }
+
+  .score-bar-val {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .score-bar-track {
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .score-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.5s ease;
+  }
+
+  .bar-positive { background: var(--green); }
+  .bar-negative { background: var(--red); }
+  .bar-neutral  { background: var(--muted); }
+
+  /* ── RECOMMENDATION ── */
+  .recommend-banner {
+    margin: 14px 18px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    background: var(--gold-dim);
+    border: 1px solid rgba(245,200,66,0.3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .recommend-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 2px;
+  }
+
+  .recommend-name {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--gold);
+  }
+
+  .recommend-icon { font-size: 28px; }
+
+  /* ── WIN/LOSS TABLE ── */
+  .wl-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .wl-box {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid var(--border);
+  }
+
+  .wl-box-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .wl-name {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted2);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .wl-items {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── COMMON OPPONENTS ── */
+  .common-section {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .common-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .common-row:last-child { border-bottom: none; }
+
+  .common-opp { color: var(--muted2); }
+
+  .result-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .result-w { background: var(--green-dim); color: var(--green); }
+  .result-l { background: var(--red-dim); color: var(--red); }
+
+  /* ── VOTE SECTION ── */
+  .vote-section {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .vote-inputs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .vote-input {
+    flex: 1;
+    min-width: 130px;
+    padding: 9px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .vote-input:focus { border-color: var(--gold); }
+
+  .vote-select {
+    padding: 9px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .vote-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .vote-btn {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    background: var(--surface2);
+    color: var(--muted2);
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .vote-btn:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: var(--gold-dim);
+  }
+
+  #votes-live {
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted2);
+    line-height: 1.8;
+  }
+
+  .votes-live-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: 5px;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── SWAP / ACTIONS ── */
+  .detail-actions {
+    padding: 14px 18px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ── FLAGS ── */
+  .flag-alert {
+    margin: 10px 18px;
+    padding: 10px 14px;
+    border-radius: 7px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .flag-red {
+    background: var(--red-dim);
+    border: 1px solid rgba(239,68,68,0.25);
+    color: #fca5a5;
+  }
+
+  .flag-green {
+    background: var(--green-dim);
+    border: 1px solid rgba(34,197,94,0.25);
+    color: #86efac;
+  }
+
+  .flag-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    opacity: 0.7;
+  }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .toolbar.visible { display: flex; }
+
+  /* ── STATS BAR ── */
+  .stats-bar {
+    display: none;
+    gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .stats-bar.visible { display: flex; }
+
+  .stat-item {
+    flex: 1;
+    padding: 14px 16px;
+    border-right: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .stat-item:last-child { border-right: none; }
+
+  .stat-num {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--gold);
+    line-height: 1;
+    margin-bottom: 3px;
+  }
+
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+    padding: 12px 18px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--gold);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    pointer-events: none;
+  }
+
+  #toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .footer-left {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .footer-left span { color: var(--gold); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 999px; }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-in { animation: fadeUp 0.35s ease forwards; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    .hero h1 { font-size: 36px; }
+    .stats-bar { flex-wrap: wrap; }
+    .stat-item { min-width: 50%; }
+    header { padding: 14px 0 0; }
+    .compare-vs { grid-template-columns: 1fr; }
+    .vs-badge { display: none; }
+  }
+
+  .import-tab {
+    padding: 9px 18px;
+    border-radius: 7px;
+    border: 1px solid var(--border2);
+    background: var(--surface);
+    color: var(--muted2);
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .import-tab:hover { border-color: var(--gold); color: var(--gold); }
+  .import-tab.active { background: var(--gold); color: #080c14; border-color: var(--gold); }
+  .tw-log-ok { color: var(--green); }
+  .tw-log-err { color: var(--red); }
+  .tw-log-info { color: var(--muted2); }
+  .tw-log-warn { color: var(--amber); }
 </style>
-
 </head>
 <body>
 
 <div class="shell">
 
   <!-- HEADER -->
-
   <header>
     <div class="logo-area">
       <div class="logo-mark">S</div>
@@ -1013,7 +1010,6 @@ transition: all 0.15s;
   </header>
 
   <!-- HERO -->
-
   <div id="hero-section" class="hero">
     <div class="hero-eyebrow">▸ Data-Driven Tournament Seeding</div>
     <h1>Run Your Seeding<span>Meeting Before</span>It Starts.</h1>
@@ -1027,145 +1023,142 @@ transition: all 0.15s;
       <div class="pill"><span class="pill-dot"></span>Live Coach Voting</div>
     </div>
 
-```
-<!-- IMPORT TABS -->
-<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
-  <button class="import-tab active" onclick="switchTab('csv')" id="tab-csv">CSV Upload</button>
-  <button class="import-tab" onclick="switchTab('tw')" id="tab-tw">Track Wrestling</button>
-  <button class="import-tab" onclick="switchTab('flo')" id="tab-flo">FloWrestling</button>
-  <button class="import-tab" onclick="switchTab('demo')" id="tab-demo">Demo Data</button>
-</div>
-
-<!-- CSV TAB -->
-<div id="panel-csv">
-  <div class="upload-zone" id="upload-zone"
-    onclick="document.getElementById('file').click()"
-    ondragover="event.preventDefault(); this.classList.add('drag-over')"
-    ondragleave="this.classList.remove('drag-over')"
-    ondrop="handleDrop(event)">
-    <span class="upload-icon">📂</span>
-    <div class="upload-title">Upload Season Data</div>
-    <div class="upload-sub">Drop a CSV file here or click to browse</div>
-    <input type="file" id="file" style="display:none" accept=".csv" onchange="upload()">
-  </div>
-  <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">CSV FORMAT</div>
-    <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted2);">weight, wrestlerA, wrestlerB, winner, method</div>
-    <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:4px;">method: fall · pin · tf · tech fall · md · major decision · dec · decision</div>
-  </div>
-</div>
-
-<!-- TRACK WRESTLING TAB -->
-<div id="panel-tw" style="display:none;">
-  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden;">
-    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Track Wrestling Import</div>
-      <div style="font-size:13px;color:var(--muted2);line-height:1.6;">Paste a Track Wrestling tournament URL or ID to automatically pull all match results into the seeding engine.</div>
+    <!-- IMPORT TABS -->
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+      <button class="import-tab active" onclick="switchTab('csv')" id="tab-csv">CSV Upload</button>
+      <button class="import-tab" onclick="switchTab('tw')" id="tab-tw">Track Wrestling</button>
+      <button class="import-tab" onclick="switchTab('flo')" id="tab-flo">FloWrestling</button>
+      <button class="import-tab" onclick="switchTab('demo')" id="tab-demo">Demo Data</button>
     </div>
-    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">SINGLE TOURNAMENT</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <input type="text" id="tw-input" class="vote-input" style="flex:1;min-width:200px;" placeholder="Paste Track Wrestling URL or tournament ID">
-        <button class="btn btn-primary" onclick="importFromTW()">Import</button>
+
+    <!-- CSV TAB -->
+    <div id="panel-csv">
+      <div class="upload-zone" id="upload-zone"
+        onclick="document.getElementById('file').click()"
+        ondragover="event.preventDefault(); this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="handleDrop(event)">
+        <span class="upload-icon">📂</span>
+        <div class="upload-title">Upload Season Data</div>
+        <div class="upload-sub">Drop a CSV file here or click to browse</div>
+        <input type="file" id="file" style="display:none" accept=".csv" onchange="upload()">
       </div>
-      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:8px;">e.g. trackwrestling.com/tw/opentournaments/tournament/displaybrackets.jsp?TID=123456</div>
-    </div>
-    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">SEASON IMPORT — MULTIPLE TOURNAMENTS</div>
-      <div style="font-size:13px;color:var(--muted2);margin-bottom:10px;">Add multiple URLs or IDs to build a full season dataset across tournaments.</div>
-      <textarea id="tw-multi" class="vote-input" rows="4" style="width:100%;resize:vertical;font-family:var(--font-mono);font-size:12px;line-height:1.8;" placeholder="One URL or ID per line"></textarea>
-      <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="importMultiTW()">Import All Tournaments</button>
-    </div>
-    <div id="tw-log" style="padding:14px 18px;display:none;">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">IMPORT LOG</div>
-      <div id="tw-log-body" style="font-family:var(--font-mono);font-size:12px;line-height:2;max-height:200px;overflow-y:auto;"></div>
-    </div>
-  </div>
-  <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">HOW IT WORKS</div>
-    <div style="font-size:12px;color:var(--muted);line-height:1.9;">
-      1. Pulls bracket and match data directly from Track Wrestling<br>
-      2. Extracts wrestler names, weight classes, and results<br>
-      3. Maps win methods: fall, tech fall, major dec, decision<br>
-      4. Feeds directly into the seeding engine
-    </div>
-  </div>
-</div>
-
-
-<!-- FLO WRESTLING TAB -->
-<div id="panel-flo" style="display:none;">
-  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden;">
-    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">FloWrestling Season Import</div>
-      <div style="font-size:13px;color:var(--muted2);line-height:1.6;">Enter each wrestler in the tournament field. SeedIT pulls their full season match history from FloWrestling — across every tournament they competed in — and seeds the bracket from complete season data.</div>
-    </div>
-
-    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;">SEASON</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <select id="flo-season" class="vote-select">
-          <option value="2025-26">2025-26 Season (Nov 2025 - Mar 2026)</option>
-          <option value="2024-25">2024-25 Season (Nov 2024 - Mar 2025)</option>
-          <option value="2023-24">2023-24 Season (Nov 2023 - Mar 2024)</option>
-        </select>
-        <input type="text" id="flo-weight" class="vote-input" style="width:100px;" placeholder="Weight (132)">
+      <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">CSV FORMAT</div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted2);">weight, wrestlerA, wrestlerB, winner, method</div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:4px;">method: fall · pin · tf · tech fall · md · major decision · dec · decision</div>
       </div>
     </div>
 
-    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">WRESTLERS IN THIS WEIGHT CLASS</div>
-      <div style="font-size:13px;color:var(--muted2);margin-bottom:10px;">Paste FloWrestling profile URLs or IDs — one per line. Find them by searching a wrestler on flowrestling.org.</div>
-      <div id="flo-wrestler-list"></div>
-      <button class="btn btn-ghost btn-sm" onclick="addFloWrestler()" style="margin-top:8px;">+ Add Wrestler</button>
-    </div>
-
-    <div style="padding:14px 18px;border-bottom:1px solid var(--border);background:rgba(245,200,66,0.04);">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">PREVIEW A WRESTLER FIRST</div>
-      <div style="font-size:12px;color:var(--muted2);margin-bottom:8px;">Paste a single FloWrestling URL to verify the right wrestler is found before running full seeding.</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <input type="text" id="flo-preview-input" class="vote-input" style="flex:1;min-width:200px;" placeholder="flowrestling.org/nextgen/people/...">
-        <button class="btn btn-ghost" onclick="previewFloWrestler()">Preview</button>
+    <!-- TRACK WRESTLING TAB -->
+    <div id="panel-tw" style="display:none;">
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden;">
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Track Wrestling Import</div>
+          <div style="font-size:13px;color:var(--muted2);line-height:1.6;">Paste a Track Wrestling tournament URL or ID to automatically pull all match results into the seeding engine.</div>
+        </div>
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">SINGLE TOURNAMENT</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="tw-input" class="vote-input" style="flex:1;min-width:200px;" placeholder="Paste Track Wrestling URL or tournament ID">
+            <button class="btn btn-primary" onclick="importFromTW()">Import</button>
+          </div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:8px;">e.g. trackwrestling.com/tw/opentournaments/tournament/displaybrackets.jsp?TID=123456</div>
+        </div>
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">SEASON IMPORT — MULTIPLE TOURNAMENTS</div>
+          <div style="font-size:13px;color:var(--muted2);margin-bottom:10px;">Add multiple URLs or IDs to build a full season dataset across tournaments.</div>
+          <textarea id="tw-multi" class="vote-input" rows="4" style="width:100%;resize:vertical;font-family:var(--font-mono);font-size:12px;line-height:1.8;" placeholder="One URL or ID per line"></textarea>
+          <button class="btn btn-primary" style="margin-top:8px;width:100%;" onclick="importMultiTW()">Import All Tournaments</button>
+        </div>
+        <div id="tw-log" style="padding:14px 18px;display:none;">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">IMPORT LOG</div>
+          <div id="tw-log-body" style="font-family:var(--font-mono);font-size:12px;line-height:2;max-height:200px;overflow-y:auto;"></div>
+        </div>
       </div>
-      <div id="flo-preview-result" style="margin-top:10px;font-family:var(--font-mono);font-size:12px;color:var(--muted2);line-height:1.8;"></div>
+      <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">HOW IT WORKS</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.9;">
+          1. Pulls bracket and match data directly from Track Wrestling<br>
+          2. Extracts wrestler names, weight classes, and results<br>
+          3. Maps win methods: fall, tech fall, major dec, decision<br>
+          4. Feeds directly into the seeding engine
+        </div>
+      </div>
     </div>
 
-    <div style="padding:16px 18px;">
-      <button class="btn btn-primary" style="width:100%;" onclick="importFromFlo()">Pull Season Data + Seed Bracket</button>
+
+    <!-- FLO WRESTLING TAB -->
+    <div id="panel-flo" style="display:none;">
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden;">
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">FloWrestling Season Import</div>
+          <div style="font-size:13px;color:var(--muted2);line-height:1.6;">Enter each wrestler in the tournament field. SeedIT pulls their full season match history from FloWrestling — across every tournament they competed in — and seeds the bracket from complete season data.</div>
+        </div>
+
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;">SEASON</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="flo-season" class="vote-select">
+              <option value="2025-26">2025-26 Season (Nov 2025 - Mar 2026)</option>
+              <option value="2024-25">2024-25 Season (Nov 2024 - Mar 2025)</option>
+              <option value="2023-24">2023-24 Season (Nov 2023 - Mar 2024)</option>
+            </select>
+            <input type="text" id="flo-weight" class="vote-input" style="width:100px;" placeholder="Weight (132)">
+          </div>
+        </div>
+
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">WRESTLERS IN THIS WEIGHT CLASS</div>
+          <div style="font-size:13px;color:var(--muted2);margin-bottom:10px;">Paste FloWrestling profile URLs or IDs — one per line. Find them by searching a wrestler on flowrestling.org.</div>
+          <div id="flo-wrestler-list"></div>
+          <button class="btn btn-ghost btn-sm" onclick="addFloWrestler()" style="margin-top:8px;">+ Add Wrestler</button>
+        </div>
+
+        <div style="padding:14px 18px;border-bottom:1px solid var(--border);background:rgba(245,200,66,0.04);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">PREVIEW A WRESTLER FIRST</div>
+          <div style="font-size:12px;color:var(--muted2);margin-bottom:8px;">Paste a single FloWrestling URL to verify the right wrestler is found before running full seeding.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="flo-preview-input" class="vote-input" style="flex:1;min-width:200px;" placeholder="flowrestling.org/nextgen/people/...">
+            <button class="btn btn-ghost" onclick="previewFloWrestler()">Preview</button>
+          </div>
+          <div id="flo-preview-result" style="margin-top:10px;font-family:var(--font-mono);font-size:12px;color:var(--muted2);line-height:1.8;"></div>
+        </div>
+
+        <div style="padding:16px 18px;">
+          <button class="btn btn-primary" style="width:100%;" onclick="importFromFlo()">Pull Season Data + Seed Bracket</button>
+        </div>
+
+        <div id="flo-log" style="padding:14px 18px;display:none;border-top:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">IMPORT LOG</div>
+          <div id="flo-log-body" style="font-family:var(--font-mono);font-size:12px;line-height:2;max-height:220px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">HOW TO FIND A WRESTLER ID</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.9;">
+          1. Go to flowrestling.org and search the wrestler by name<br>
+          2. Click their profile<br>
+          3. Copy the URL from your browser — it contains their unique ID<br>
+          4. Example: flowrestling.org/nextgen/people/<span style="color:var(--gold);">0QBPq4lRlQuIWK71</span>
+        </div>
+      </div>
     </div>
 
-    <div id="flo-log" style="padding:14px 18px;display:none;border-top:1px solid var(--border);">
-      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">IMPORT LOG</div>
-      <div id="flo-log-body" style="font-family:var(--font-mono);font-size:12px;line-height:2;max-height:220px;overflow-y:auto;"></div>
+    <!-- DEMO TAB -->
+    <div id="panel-demo" style="display:none;">
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:28px;text-align:center;">
+        <div style="font-size:44px;margin-bottom:12px;">🏆</div>
+        <div style="font-family:var(--font-display);font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Late Season Demo</div>
+        <div style="font-size:13px;color:var(--muted2);margin-bottom:22px;line-height:1.6;">10 weight classes · 8 wrestlers each<br>Real match results with win methods · Upsets and controversies built in</div>
+        <button class="btn btn-primary" onclick="loadDemo()">Load Demo Data</button>
+      </div>
     </div>
-  </div>
-
-  <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
-    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">HOW TO FIND A WRESTLER ID</div>
-    <div style="font-size:12px;color:var(--muted);line-height:1.9;">
-      1. Go to flowrestling.org and search the wrestler by name<br>
-      2. Click their profile<br>
-      3. Copy the URL from your browser — it contains their unique ID<br>
-      4. Example: flowrestling.org/nextgen/people/<span style="color:var(--gold);">0QBPq4lRlQuIWK71</span>
-    </div>
-  </div>
-</div>
-
-<!-- DEMO TAB -->
-<div id="panel-demo" style="display:none;">
-  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:28px;text-align:center;">
-    <div style="font-size:44px;margin-bottom:12px;">🏆</div>
-    <div style="font-family:var(--font-display);font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Late Season Demo</div>
-    <div style="font-size:13px;color:var(--muted2);margin-bottom:22px;line-height:1.6;">10 weight classes · 8 wrestlers each<br>Real match results with win methods · Upsets and controversies built in</div>
-    <button class="btn btn-primary" onclick="loadDemo()">Load Demo Data</button>
-  </div>
-</div>
-```
 
   </div>
 
   <!-- STATS BAR -->
-
   <div class="stats-bar" id="stats-bar">
     <div class="stat-item">
       <div class="stat-num" id="stat-weights">—</div>
@@ -1186,14 +1179,12 @@ transition: all 0.15s;
   </div>
 
   <!-- WEIGHT TABS -->
-
   <div id="weights-bar">
     <div class="weights-label">▸ Select Weight Class</div>
     <div class="weight-tabs" id="weight-tabs"></div>
   </div>
 
   <!-- TOOLBAR -->
-
   <div class="toolbar" id="toolbar">
     <button class="btn btn-ghost btn-sm" onclick="runDebateQueue()">⚠ Debate Queue</button>
     <button class="btn btn-ghost btn-sm" onclick="showAutoReview()">🔍 Review Flags</button>
@@ -1202,7 +1193,6 @@ transition: all 0.15s;
   </div>
 
   <!-- MAIN GRID -->
-
   <div class="main-grid" id="main-grid">
     <div id="seed-panel"></div>
     <div id="details" class="panel">
@@ -1217,7 +1207,6 @@ transition: all 0.15s;
 </div>
 
 <!-- TOAST -->
-
 <div id="toast"></div>
 
 <script>
