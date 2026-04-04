@@ -2806,7 +2806,7 @@ async function previewFloWrestler() {
         m.opponent + ' (' + m.method.toUpperCase() + (m.won ? ' W' : ' L') + ')'
       );
       html += recent.join(', ') + '</span>';
-      html += '<br><button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="addFloWrestler('' + input + '','' + name + '')">+ Add to Import List</button>';
+      html += `<br><button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="addFloWrestler('${input}','${name}')">+ Add to Import List</button>`;
     } else {
       html += '<br><span style="color:var(--amber);">No matches found for this season — check the season filter or wrestler ID</span>';
     }
