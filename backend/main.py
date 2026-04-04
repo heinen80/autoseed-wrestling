@@ -698,35 +698,84 @@ def parse_weight_from_text(text):
         return m.group(1)
     return None
 
+FLO_API_BASE = "https://prod-web-api.flowrestling.org/api"
+
+FLO_API_HEADERS = {
+    "accept": "application/json",
+    "origin": "https://www.flowrestling.org",
+    "referer": "https://www.flowrestling.org/",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+}
+
+WIN_TYPE_MAP = {
+    "F":   "fall",
+    "TF":  "tf",
+    "MD":  "md",
+    "DEC": "dec",
+    "FOR": "dec",
+}
+
 async def fetch_flo_profile(wrestler_id, season=None):
     season_start, season_end = get_season_range(season)
     matches = []
     wrestler_name = None
     weight_class = None
 
-    url = f"{FLO_BASE}/nextgen/people/{wrestler_id}?tab=results"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.flowrestling.org/",
-    }
-
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            resp = await client.get(url, headers=headers)
-            status = resp.status_code
-            html = resp.text
+            # Fetch wrestler name
+            athlete_resp = await client.get(
+                f"{FLO_API_BASE}/athletes/{wrestler_id}",
+                headers=FLO_API_HEADERS,
+            )
+            athlete_resp.raise_for_status()
+            athlete_data = athlete_resp.json()
+            wrestler_name = athlete_data.get("name") or wrestler_id
 
-        return {
-            "wrestler_id": wrestler_id,
-            "wrestler_name": wrestler_name,
-            "weight_class": weight_class,
-            "matches": matches,
-            "match_count": 0,
-            "http_status": status,
-            "error": html[:5000],
-        }
+            # Fetch match results
+            results_resp = await client.get(
+                f"{FLO_API_BASE}/athletes/{wrestler_id}/results",
+                headers=FLO_API_HEADERS,
+            )
+            results_resp.raise_for_status()
+            results_data = results_resp.json()
+
+        for tournament in results_data.get("data") or []:
+            tournament_name = tournament.get("name") or "FloWrestling"
+            for bout in tournament.get("boutResults") or []:
+                opponent = (bout.get("opponent") or {}).get("name") or ""
+                if not opponent:
+                    continue
+
+                won = bool((bout.get("athlete") or {}).get("isWinner"))
+                win_type = str(bout.get("winType") or "").upper()
+                method = WIN_TYPE_MAP.get(win_type, "dec")
+
+                wc = bout.get("weight") or ""
+                if wc and not weight_class:
+                    weight_class = parse_weight_from_text(str(wc))
+
+                date_str = bout.get("date") or ""
+                match_date = None
+                if date_str:
+                    try:
+                        match_date = datetime.fromisoformat(date_str.rstrip("Z").split("T")[0])
+                    except Exception:
+                        pass
+
+                in_season = True
+                if match_date:
+                    in_season = season_start <= match_date <= season_end
+
+                if in_season:
+                    matches.append({
+                        "opponent": opponent,
+                        "method": method,
+                        "won": won,
+                        "tournament": tournament_name,
+                        "date": match_date.strftime("%b %d, %Y") if match_date else None,
+                        "score": None,
+                    })
 
     except Exception as e:
         return {
@@ -737,6 +786,15 @@ async def fetch_flo_profile(wrestler_id, season=None):
             "match_count": 0,
             "error": str(e),
         }
+
+    return {
+        "wrestler_id": wrestler_id,
+        "wrestler_name": wrestler_name,
+        "weight_class": weight_class,
+        "matches": matches,
+        "match_count": len(matches),
+        "error": None,
+    }
 
 def build_seedit_matches(profiles, weight_override=None):
     seedit_matches = []
