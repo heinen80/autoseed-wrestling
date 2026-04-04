@@ -7,10 +7,10 @@ app = FastAPI()
 
 app.add_middleware(
 CORSMiddleware,
-allow_origins=[”*”],
+allow_origins=["*"],
 allow_credentials=True,
-allow_methods=[”*”],
-allow_headers=[”*”],
+allow_methods=["*"],
+allow_headers=["*"],
 )
 
 # —————————
@@ -30,21 +30,21 @@ sessions = {}
 # —————————
 
 WIN_METHOD_POINTS = {
-“fall”:           6.0,
-“pin”:            6.0,
-“tf”:             5.0,
-“tech fall”:      5.0,
-“tech_fall”:      5.0,
-“md”:             4.0,
-“major decision”: 4.0,
-“major_decision”: 4.0,
-“dec”:            3.0,
-“decision”:       3.0,
-“default”:        3.0,   # forfeit / default win — treated like a decision
+"fall":           6.0,
+"pin":            6.0,
+"tf":             5.0,
+"tech fall":      5.0,
+"tech_fall":      5.0,
+"md":             4.0,
+"major decision": 4.0,
+"major_decision": 4.0,
+"dec":            3.0,
+"decision":       3.0,
+"default":        3.0,   # forfeit / default win — treated like a decision
 }
 
 def get_method_points(method: str) -> float:
-“”“Return point value for a win method string. Falls back to decision (3.0).”””
+"""Return point value for a win method string. Falls back to decision (3.0)."""
 if not method:
 return 3.0
 return WIN_METHOD_POINTS.get(str(method).strip().lower(), 3.0)
@@ -55,9 +55,9 @@ return WIN_METHOD_POINTS.get(str(method).strip().lower(), 3.0)
 
 # —————————
 
-@app.get(”/”)
+@app.get("/")
 def root():
-return {“status”: “ok”}
+return {"status": "ok"}
 
 # —————————
 
@@ -66,7 +66,7 @@ return {“status”: “ok”}
 # —————————
 
 def build_history(matches):
-“””
+"""
 Build per-wrestler win/loss history.
 Now also tracks win_methods: {opponent: method_points} for each win.
 
@@ -104,8 +104,8 @@ return history
 ```
 
 def avg_win_quality(wrestler: str, history: dict) -> float:
-“”“Average method points across all wins. 0 if no wins.”””
-methods = history[wrestler][“win_methods”]
+"""Average method points across all wins. 0 if no wins."""
+methods = history[wrestler]["win_methods"]
 if not methods:
 return 0.0
 return sum(methods.values()) / len(methods)
@@ -113,12 +113,12 @@ return sum(methods.values()) / len(methods)
 def build_sos(history):
 sos = {}
 for w in history:
-opps = history[w][“wins”] + history[w][“losses”]
+opps = history[w]["wins"] + history[w]["losses"]
 vals = []
 for o in opps:
-total = len(history[o][“wins”]) + len(history[o][“losses”])
+total = len(history[o]["wins"]) + len(history[o]["losses"])
 if total:
-vals.append(len(history[o][“wins”]) / total)
+vals.append(len(history[o]["wins"]) / total)
 sos[w] = round(sum(vals) / len(vals), 3) if vals else 0
 return sos
 
@@ -183,7 +183,7 @@ return common
 ```
 
 def build_power_scores(history, sos, top_wins, bad_losses):
-“””
+"""
 Unified power score — identical weighting to compare_breakdown()
 so seeds and comparisons never contradict each other.
 
@@ -246,21 +246,21 @@ def compute_rankings(power_scores):
 return sorted(power_scores.items(), key=lambda x: x[1], reverse=True)
 
 def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=None):
-“””
+"""
 Head-to-head comparison using the SAME criteria weights as build_power_scores.
 Returns advantage score, reasons, and per-category breakdown.
 Now includes win method quality in head-to-head and common opponent scoring.
-“””
+"""
 adv = 0
 reasons = []
 breakdown = {
-“head_to_head”: 0,
-“win_quality”:  0,
-“record”:       0,
-“common”:       0,
-“sos”:          0,
-“top_wins”:     0,
-“bad_losses”:   0,
+"head_to_head": 0,
+"win_quality":  0,
+"record":       0,
+"common":       0,
+"sos":          0,
+"top_wins":     0,
+"bad_losses":   0,
 }
 
 ```
@@ -409,34 +409,34 @@ return {
 ```
 
 def _method_label(pts: float) -> str:
-“”“Convert method points back to a human-readable label.”””
-if pts >= 6:   return “Fall”
-if pts >= 5:   return “Tech Fall”
-if pts >= 4:   return “Major Dec”
-if pts >= 3:   return “Decision”
-return “—”
+"""Convert method points back to a human-readable label."""
+if pts >= 6:   return "Fall"
+if pts >= 5:   return "Tech Fall"
+if pts >= 4:   return "Major Dec"
+if pts >= 3:   return "Decision"
+return "—"
 
 def build_win_method_summary(history):
-“””
+"""
 Returns per-wrestler breakdown of win types for display.
-{ wrestler: { “fall”: n, “tech_fall”: n, “major_dec”: n, “decision”: n } }
-“””
+{ wrestler: { "fall": n, "tech_fall": n, "major_dec": n, "decision": n } }
+"""
 summary = {}
 for w in history:
-counts = {“fall”: 0, “tech_fall”: 0, “major_dec”: 0, “decision”: 0}
-for opp, pts in history[w][“win_methods”].items():
-if pts >= 6:   counts[“fall”]      += 1
-elif pts >= 5: counts[“tech_fall”] += 1
-elif pts >= 4: counts[“major_dec”] += 1
-else:          counts[“decision”]  += 1
+counts = {"fall": 0, "tech_fall": 0, "major_dec": 0, "decision": 0}
+for opp, pts in history[w]["win_methods"].items():
+if pts >= 6:   counts["fall"]      += 1
+elif pts >= 5: counts["tech_fall"] += 1
+elif pts >= 4: counts["major_dec"] += 1
+else:          counts["decision"]  += 1
 summary[w] = counts
 return summary
 
 def build_confidence(seeds, history, sos, top_wins, bad_losses, power_scores):
-“””
+"""
 Confidence is based on the compare_breakdown advantage score.
 Uses the same unified algorithm — no more divergence.
-“””
+"""
 conf = {}
 seed_names = [s[0] for s in seeds]
 
@@ -499,17 +499,17 @@ return controversy_flags, upset_alerts, debate_queue
 
 # —————————
 
-@app.post(”/upload/”)
+@app.post("/upload/")
 async def upload(request: Request, file: UploadFile = File(None)):
 try:
 if file:
 contents = await file.read()
 from io import StringIO
-df = pd.read_csv(StringIO(contents.decode(“utf-8”)))
-matches = df.to_dict(orient=“records”)
+df = pd.read_csv(StringIO(contents.decode("utf-8")))
+matches = df.to_dict(orient="records")
 else:
 data = await request.json()
-matches = data.get(“matches”, [])
+matches = data.get("matches", [])
 
 ```
     for m in matches:
@@ -563,33 +563,33 @@ except Exception as e:
 
 # —————————
 
-@app.post(”/session/{weight}”)
+@app.post("/session/{weight}")
 def create_session(weight: str):
 sessions[weight] = {
-“votes”:           {},
-“voters”:          {},
-“current_matchup”: None,
+"votes":           {},
+"voters":          {},
+"current_matchup": None,
 }
-return {“status”: “created”}
+return {"status": "created"}
 
-@app.post(”/session/{weight}/matchup”)
+@app.post("/session/{weight}/matchup")
 async def set_matchup(weight: str, request: Request):
 data = await request.json()
-a = data.get(“a”)
-b = data.get(“b”)
+a = data.get("a")
+b = data.get("b")
 sessions[weight] = {
-“votes”:           {a: 0, b: 0},
-“voters”:          {},
-“current_matchup”: [a, b],
+"votes":           {a: 0, b: 0},
+"voters":          {},
+"current_matchup": [a, b],
 }
 return sessions[weight]
 
-@app.post(”/vote/{weight}”)
+@app.post("/vote/{weight}")
 async def vote(weight: str, request: Request):
 data   = await request.json()
-name   = data.get(“name”)
-voter  = data.get(“voter”, “Anonymous”)
-role   = data.get(“role”, “coach”)
+name   = data.get("name")
+voter  = data.get("voter", "Anonymous")
+role   = data.get("role", "coach")
 
 ```
 sessions.setdefault(weight, {"votes": {}, "voters": {}, "current_matchup": None})
@@ -613,9 +613,9 @@ sessions[weight]["voters"][voter] = {
 return sessions[weight]
 ```
 
-@app.get(”/votes/{weight}”)
+@app.get("/votes/{weight}")
 def get_votes(weight: str):
-return sessions.setdefault(weight, {“votes”: {}, “voters”: {}, “current_matchup”: None})
+return sessions.setdefault(weight, {"votes": {}, "voters": {}, "current_matchup": None})
 
 # —————————
 
@@ -629,7 +629,7 @@ from datetime import datetime
 import re
 import asyncio
 
-FLO_BASE = “https://flowrestling.org”
+FLO_BASE = "https://flowrestling.org"
 
 # Season runs November through March
 
@@ -638,9 +638,9 @@ FLO_BASE = “https://flowrestling.org”
 def get_season_range(season_str=None):
 now = datetime.now()
 if season_str:
-# Expect format “2025-26” or “2025”
+# Expect format "2025-26" or "2025"
 try:
-start_year = int(season_str.split(”-”)[0])
+start_year = int(season_str.split("-")[0])
 except:
 start_year = now.year if now.month >= 11 else now.year - 1
 else:
@@ -654,43 +654,43 @@ return season_start, season_end
 def extract_flo_id(url_or_id):
 url_or_id = url_or_id.strip()
 # Already a bare ID (alphanumeric, no slash)
-if re.match(r’^[A-Za-z0-9_-]+$’, url_or_id) and ‘/’ not in url_or_id:
+if re.match(r'^[A-Za-z0-9_-]+$', url_or_id) and '/' not in url_or_id:
 return url_or_id
 # Extract from URL path: /people/XXXX
-m = re.search(r’/people/([A-Za-z0-9_-]+)’, url_or_id)
+m = re.search(r'/people/([A-Za-z0-9_-]+)', url_or_id)
 if m:
 return m.group(1)
 return None
 
 def map_flo_method(raw):
 if not raw:
-return “dec”
+return "dec"
 s = raw.strip().upper()
-if s in (“F”, “FALL”, “PIN”):
-return “fall”
-if s in (“TF”, “TECH”, “TECHNICAL FALL”, “TECH FALL”):
-return “tf”
-if s in (“MD”, “MAJOR”, “MAJOR DECISION”, “MAJ”):
-return “md”
-if s in (“DEC”, “DECISION”, “D”):
-return “dec”
-if s in (“DQ”, “DEFAULT”, “FORFEIT”, “FOR”):
-return “dec”
-return “dec”
+if s in ("F", "FALL", "PIN"):
+return "fall"
+if s in ("TF", "TECH", "TECHNICAL FALL", "TECH FALL"):
+return "tf"
+if s in ("MD", "MAJOR", "MAJOR DECISION", "MAJ"):
+return "md"
+if s in ("DEC", "DECISION", "D"):
+return "dec"
+if s in ("DQ", "DEFAULT", "FORFEIT", "FOR"):
+return "dec"
+return "dec"
 
 def parse_weight_from_text(text):
 # Look for standalone numbers that look like weight classes
-m = re.search(r’\b(100|106|110|113|119|120|125|126|132|133|138|139|144|145|150|152|157|160|165|170|175|182|183|189|195|196|215|220|225|235|285|HWT)\b’, str(text))
+m = re.search(r'\b(100|106|110|113|119|120|125|126|132|133|138|139|144|145|150|152|157|160|165|170|175|182|183|189|195|196|215|220|225|235|285|HWT)\b', str(text))
 if m:
 return m.group(1)
 return None
 
 async def fetch_flo_profile(wrestler_id, season=None, client=None):
-url = f”{FLO_BASE}/nextgen/people/{wrestler_id}?tab=results”
+url = f"{FLO_BASE}/nextgen/people/{wrestler_id}?tab=results"
 headers = {
-“User-Agent”: “Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36”,
-“Accept”: “text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8”,
-“Accept-Language”: “en-US,en;q=0.5”,
+"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+"Accept-Language": "en-US,en;q=0.5",
 }
 
 ```
@@ -906,9 +906,9 @@ return seedit_matches
 
 # —————————
 
-@app.post(”/scrape/flo”)
+@app.post("/scrape/flo")
 async def scrape_flo(request: Request):
-“””
+"""
 Scrape FloWrestling profiles for a group of wrestlers and seed them.
 
 ```
@@ -1010,15 +1010,15 @@ except Exception as e:
     return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
 ```
 
-@app.get(”/scrape/flo/preview/{wrestler_id}”)
+@app.get("/scrape/flo/preview/{wrestler_id}")
 async def preview_flo_wrestler(wrestler_id: str, season: str = None):
-“””
-Preview a single wrestler’s scraped data before running full seeding.
+"""
+Preview a single wrestler's scraped data before running full seeding.
 Useful for confirming the right wrestler was found.
 GET /scrape/flo/preview/0QBPq4lRlQuIWK71?season=2025-26
-“””
+"""
 try:
 profile = await fetch_flo_profile(wrestler_id, season=season)
 return JSONResponse(profile)
 except Exception as e:
-return JSONResponse({“error”: str(e)}, status_code=500)
+return JSONResponse({"error": str(e)}, status_code=500)
