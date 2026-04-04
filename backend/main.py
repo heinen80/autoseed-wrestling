@@ -607,7 +607,7 @@ def get_votes(weight: str):
 
 # —————————
 
-import httpx
+from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 from datetime import datetime
 import re
@@ -669,27 +669,29 @@ def parse_weight_from_text(text):
         return m.group(1)
     return None
 
-async def fetch_flo_profile(wrestler_id, season=None, client=None):
+async def fetch_flo_profile(wrestler_id, season=None, browser=None):
     url = f"{FLO_BASE}/nextgen/people/{wrestler_id}?tab=results"
-    headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    }
 
     season_start, season_end = get_season_range(season)
     matches = []
     wrestler_name = None
     weight_class = None
 
+    own_browser = False
+    pw_ctx = None
     try:
-        if client is None:
-            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as c:
-                resp = await c.get(url, headers=headers)
-                html = resp.text
-        else:
-            resp = await client.get(url, headers=headers)
-            html = resp.text
+        if browser is None:
+            pw_ctx = await async_playwright().start()
+            browser = await pw_ctx.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"],
+            )
+            own_browser = True
+
+        page = await browser.new_page()
+        await page.goto(url, wait_until="networkidle", timeout=30000)
+        html = await page.content()
+        await page.close()
 
         soup = BeautifulSoup(html, "html.parser")
 
@@ -839,6 +841,11 @@ async def fetch_flo_profile(wrestler_id, season=None, client=None):
             "error": str(e),
             "match_count": 0,
         }
+    finally:
+        if own_browser and browser:
+            await browser.close()
+        if pw_ctx:
+            await pw_ctx.stop()
 
     return {
         "wrestler_id": wrestler_id,
@@ -915,7 +922,11 @@ async def scrape_flo(request: Request):
         profiles = []
         errors = []
 
-        async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"],
+            )
             tasks = []
             for entry in wrestler_entries:
                 raw = entry.get("url") or entry.get("id") or ""
@@ -923,9 +934,10 @@ async def scrape_flo(request: Request):
                 if not flo_id:
                     errors.append(f"Could not parse ID from: {raw}")
                     continue
-                tasks.append(fetch_flo_profile(flo_id, season=season, client=client))
+                tasks.append(fetch_flo_profile(flo_id, season=season, browser=browser))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
+            await browser.close()
             for i, r in enumerate(results):
                 if isinstance(r, Exception):
                     errors.append(f"Error fetching profile {i}: {str(r)}")
