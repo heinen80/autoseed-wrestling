@@ -614,7 +614,7 @@ import asyncio
 import json
 
 FLO_BASE = "https://flowrestling.org"
-FLO_GRAPHQL = "https://flowrestling.org/api/graphql"
+FLO_GRAPHQL = "https://www.flowrestling.org/api/graphql"
 
 WRESTLER_RESULTS_QUERY = """
 query GetAthleteResults($personId: String!) {
@@ -714,7 +714,7 @@ async def fetch_flo_profile(wrestler_id, season=None):
             "Accept": "application/json",
             "User-Agent": "Mozilla/5.0",
         }
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             resp = await client.post(FLO_GRAPHQL, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
