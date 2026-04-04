@@ -1032,6 +1032,7 @@ transition: all 0.15s;
 <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
   <button class="import-tab active" onclick="switchTab('csv')" id="tab-csv">CSV Upload</button>
   <button class="import-tab" onclick="switchTab('tw')" id="tab-tw">Track Wrestling</button>
+  <button class="import-tab" onclick="switchTab('flo')" id="tab-flo">FloWrestling</button>
   <button class="import-tab" onclick="switchTab('demo')" id="tab-demo">Demo Data</button>
 </div>
 
@@ -1087,6 +1088,65 @@ transition: all 0.15s;
       2. Extracts wrestler names, weight classes, and results<br>
       3. Maps win methods: fall, tech fall, major dec, decision<br>
       4. Feeds directly into the seeding engine
+    </div>
+  </div>
+</div>
+
+
+<!-- FLO WRESTLING TAB -->
+<div id="panel-flo" style="display:none;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden;">
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">FloWrestling Season Import</div>
+      <div style="font-size:13px;color:var(--muted2);line-height:1.6;">Enter each wrestler in the tournament field. SeedIT pulls their full season match history from FloWrestling — across every tournament they competed in — and seeds the bracket from complete season data.</div>
+    </div>
+
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;">SEASON</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select id="flo-season" class="vote-select">
+          <option value="2025-26">2025-26 Season (Nov 2025 - Mar 2026)</option>
+          <option value="2024-25">2024-25 Season (Nov 2024 - Mar 2025)</option>
+          <option value="2023-24">2023-24 Season (Nov 2023 - Mar 2024)</option>
+        </select>
+        <input type="text" id="flo-weight" class="vote-input" style="width:100px;" placeholder="Weight (132)">
+      </div>
+    </div>
+
+    <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">WRESTLERS IN THIS WEIGHT CLASS</div>
+      <div style="font-size:13px;color:var(--muted2);margin-bottom:10px;">Paste FloWrestling profile URLs or IDs — one per line. Find them by searching a wrestler on flowrestling.org.</div>
+      <div id="flo-wrestler-list"></div>
+      <button class="btn btn-ghost btn-sm" onclick="addFloWrestler()" style="margin-top:8px;">+ Add Wrestler</button>
+    </div>
+
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);background:rgba(245,200,66,0.04);">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">PREVIEW A WRESTLER FIRST</div>
+      <div style="font-size:12px;color:var(--muted2);margin-bottom:8px;">Paste a single FloWrestling URL to verify the right wrestler is found before running full seeding.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="text" id="flo-preview-input" class="vote-input" style="flex:1;min-width:200px;" placeholder="flowrestling.org/nextgen/people/...">
+        <button class="btn btn-ghost" onclick="previewFloWrestler()">Preview</button>
+      </div>
+      <div id="flo-preview-result" style="margin-top:10px;font-family:var(--font-mono);font-size:12px;color:var(--muted2);line-height:1.8;"></div>
+    </div>
+
+    <div style="padding:16px 18px;">
+      <button class="btn btn-primary" style="width:100%;" onclick="importFromFlo()">Pull Season Data + Seed Bracket</button>
+    </div>
+
+    <div id="flo-log" style="padding:14px 18px;display:none;border-top:1px solid var(--border);">
+      <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">IMPORT LOG</div>
+      <div id="flo-log-body" style="font-family:var(--font-mono);font-size:12px;line-height:2;max-height:220px;overflow-y:auto;"></div>
+    </div>
+  </div>
+
+  <div style="margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">
+    <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:6px;">HOW TO FIND A WRESTLER ID</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.9;">
+      1. Go to flowrestling.org and search the wrestler by name<br>
+      2. Click their profile<br>
+      3. Copy the URL from your browser — it contains their unique ID<br>
+      4. Example: flowrestling.org/nextgen/people/<span style="color:var(--gold);">0QBPq4lRlQuIWK71</span>
     </div>
   </div>
 </div>
@@ -2429,7 +2489,7 @@ function download(content, filename) {
 
 // ── TAB SWITCHER ──
 function switchTab(tab) {
-  ['csv','tw','demo'].forEach(t => {
+  ['csv','tw','flo','demo'].forEach(t => {
     document.getElementById('panel-' + t).style.display = t === tab ? 'block' : 'none';
     const btn = document.getElementById('tab-' + t);
     if (btn) btn.classList.toggle('active', t === tab);
@@ -2672,6 +2732,200 @@ async function importMultiTW() {
     toast('Season import complete — ' + allMatches.length + ' matches loaded');
   }
 }
+
+
+// ── FLO WRESTLING IMPORT ──
+
+let floWrestlerCount = 0;
+
+function addFloWrestler(url='', name='') {
+  floWrestlerCount++;
+  const id = 'flo-w-' + floWrestlerCount;
+  const container = document.getElementById('flo-wrestler-list');
+  const row = document.createElement('div');
+  row.id = id;
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center;';
+  row.innerHTML = `
+    <input type="text" class="vote-input flo-url" style="flex:2;min-width:180px;"
+      placeholder="flowrestling.org/nextgen/people/..." value="${url}">
+    <input type="text" class="vote-input flo-name" style="flex:1;min-width:120px;"
+      placeholder="Wrestler name (optional)" value="${name}">
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('${id}').remove()" style="flex-shrink:0;">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function floLog(msg, type) {
+  const log = document.getElementById('flo-log');
+  const body = document.getElementById('flo-log-body');
+  if (!log || !body) return;
+  log.style.display = 'block';
+  const cls = type === 'ok' ? 'tw-log-ok' : type === 'err' ? 'tw-log-err' : type === 'warn' ? 'tw-log-warn' : 'tw-log-info';
+  body.innerHTML += '<div class="' + cls + '">' + msg + '</div>';
+  body.scrollTop = body.scrollHeight;
+}
+
+function floLogClear() {
+  const log = document.getElementById('flo-log');
+  const body = document.getElementById('flo-log-body');
+  if (log) log.style.display = 'none';
+  if (body) body.innerHTML = '';
+}
+
+function extractFloId(input) {
+  input = input.trim();
+  if (!input) return null;
+  // Already bare ID
+  if (/^[A-Za-z0-9_-]+$/.test(input) && !input.includes('/')) return input;
+  // Extract from /people/ID
+  const m = input.match(/\/people\/([A-Za-z0-9_-]+)/);
+  if (m) return m[1];
+  return null;
+}
+
+async function previewFloWrestler() {
+  const input = document.getElementById('flo-preview-input').value.trim();
+  const resultEl = document.getElementById('flo-preview-result');
+  if (!input) { toast('Paste a FloWrestling URL first'); return; }
+
+  const floId = extractFloId(input);
+  if (!floId) { resultEl.innerHTML = '<span style="color:var(--red);">Could not find wrestler ID in that URL</span>'; return; }
+
+  const season = document.getElementById('flo-season').value;
+  resultEl.innerHTML = '<span style="color:var(--muted2);">Fetching...</span>';
+
+  try {
+    const res = await fetch(API + '/scrape/flo/preview/' + floId + '?season=' + season);
+    const profile = await res.json();
+
+    if (profile.error) {
+      resultEl.innerHTML = '<span style="color:var(--red);">Error: ' + profile.error + '</span>';
+      return;
+    }
+
+    const name = profile.wrestler_name || floId;
+    const count = profile.match_count || 0;
+    const weight = profile.weight_class || 'Unknown';
+
+    let html = '<span style="color:var(--green);">Found: ' + name + '</span>';
+    html += ' &nbsp;|&nbsp; Weight: ' + weight;
+    html += ' &nbsp;|&nbsp; ' + count + ' matches this season';
+
+    if (count > 0) {
+      html += '<br><span style="color:var(--muted);">Recent opponents: ';
+      const recent = profile.matches.slice(0, 4).map(m =>
+        m.opponent + ' (' + m.method.toUpperCase() + (m.won ? ' W' : ' L') + ')'
+      );
+      html += recent.join(', ') + '</span>';
+      html += '<br><button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="addFloWrestler('' + input + '','' + name + '')">+ Add to Import List</button>';
+    } else {
+      html += '<br><span style="color:var(--amber);">No matches found for this season — check the season filter or wrestler ID</span>';
+    }
+
+    resultEl.innerHTML = html;
+  } catch(e) {
+    resultEl.innerHTML = '<span style="color:var(--red);">Connection error: ' + e.message + '</span>';
+  }
+}
+
+async function importFromFlo() {
+  floLogClear();
+
+  const season = document.getElementById('flo-season').value;
+  const weight = document.getElementById('flo-weight').value.trim();
+  const rows = document.querySelectorAll('#flo-wrestler-list > div');
+
+  if (!rows.length) {
+    toast('Add at least one wrestler first');
+    return;
+  }
+
+  const wrestlers = [];
+  rows.forEach(row => {
+    const url = row.querySelector('.flo-url')?.value?.trim();
+    const name = row.querySelector('.flo-name')?.value?.trim();
+    if (url) {
+      const id = extractFloId(url);
+      if (id) wrestlers.push({ id, url, name: name || null });
+      else floLog('Could not parse ID from: ' + url, 'warn');
+    }
+  });
+
+  if (!wrestlers.length) {
+    toast('No valid FloWrestling URLs found');
+    return;
+  }
+
+  floLog('Starting import for ' + wrestlers.length + ' wrestler(s)...', 'info');
+  floLog('Season: ' + season + (weight ? ' | Weight: ' + weight + ' lbs' : ''), 'info');
+  toast('Pulling season data from FloWrestling...');
+
+  wrestlers.forEach(w => {
+    floLog('Queued: ' + (w.name || w.id), 'info');
+  });
+
+  try {
+    const body = {
+      wrestlers: wrestlers.map(w => ({ id: w.id, name: w.name, url: w.url })),
+      season,
+    };
+    if (weight) body.weight = weight;
+
+    const res = await fetch(API + '/scrape/flo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const result = await res.json();
+
+    if (result.error) {
+      floLog('Error: ' + result.error, 'err');
+      if (result.tip) floLog('Tip: ' + result.tip, 'warn');
+      if (result.profiles) {
+        result.profiles.forEach(p => {
+          floLog(
+            (p.wrestler_name || p.wrestler_id) + ': ' + p.match_count + ' matches' + (p.error ? ' | ERROR: ' + p.error : ''),
+            p.error ? 'err' : p.match_count > 0 ? 'ok' : 'warn'
+          );
+        });
+      }
+      toast('Import issue — see log');
+      return;
+    }
+
+    // Success — result is seeded weight data
+    const weights = Object.keys(result);
+    weights.forEach(w => {
+      const wd = result[w];
+      floLog('Weight ' + w + ': ' + wd.seeds.length + ' wrestlers seeded, ' + (wd.matches_processed || 0) + ' matches processed', 'ok');
+      if (wd.controversy_flags?.length) {
+        wd.controversy_flags.forEach(f => floLog('Flag: ' + f, 'warn'));
+      }
+      if (wd.errors?.length) {
+        wd.errors.forEach(e => floLog('Warning: ' + e, 'warn'));
+      }
+    });
+
+    data = result;
+    onDataLoaded();
+    toast('FloWrestling import complete');
+
+  } catch(e) {
+    floLog('Connection error: ' + e.message, 'err');
+    toast('Backend connection error');
+  }
+}
+
+// Initialize with 3 empty wrestler slots when Flo tab opens
+document.getElementById('tab-flo').addEventListener('click', function() {
+  const list = document.getElementById('flo-wrestler-list');
+  if (list && list.children.length === 0) {
+    addFloWrestler();
+    addFloWrestler();
+    addFloWrestler();
+  }
+});
 
 </script>
 
