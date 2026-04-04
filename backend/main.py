@@ -704,70 +704,29 @@ async def fetch_flo_profile(wrestler_id, season=None):
     wrestler_name = None
     weight_class = None
 
+    url = f"{FLO_BASE}/nextgen/people/{wrestler_id}?tab=results"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.flowrestling.org/",
+    }
+
     try:
-        payload = {
-            "query": WRESTLER_RESULTS_QUERY,
-            "variables": {"personId": wrestler_id},
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0",
-        }
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            resp = await client.post(FLO_GRAPHQL, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+            resp = await client.get(url, headers=headers)
+            status = resp.status_code
+            html = resp.text
 
-        person = (data.get("data") or {}).get("person") or {}
-        first = person.get("firstName") or ""
-        last = person.get("lastName") or ""
-        wrestler_name = f"{first} {last}".strip() or wrestler_id
-
-        bouts = (person.get("bouts") or {}).get("edges") or []
-        for edge in bouts:
-            node = edge.get("node") or {}
-
-            opp_first = node.get("opponentFirstName") or ""
-            opp_last = node.get("opponentLastName") or ""
-            opponent = f"{opp_first} {opp_last}".strip()
-            if not opponent:
-                continue
-
-            win_type = node.get("winType") or ""
-            bout_result = str(node.get("boutResult") or "").upper()
-            won = bout_result in ("WIN", "W", "TRUE", "1")
-            method = map_flo_method(win_type)
-
-            wc_name = (node.get("weightClass") or {}).get("name") or ""
-            if wc_name and not weight_class:
-                weight_class = parse_weight_from_text(wc_name)
-
-            event = node.get("event") or {}
-            tournament = event.get("name") or "FloWrestling"
-            start_date = event.get("startDate") or ""
-
-            match_date = None
-            if start_date:
-                try:
-                    match_date = datetime.fromisoformat(start_date.rstrip("Z").split("T")[0])
-                except Exception:
-                    pass
-
-            in_season = True
-            if match_date:
-                in_season = season_start <= match_date <= season_end
-
-            if in_season:
-                date_str = match_date.strftime("%b %d, %Y") if match_date else None
-                matches.append({
-                    "opponent": opponent,
-                    "method": method,
-                    "won": won,
-                    "tournament": tournament,
-                    "date": date_str,
-                    "score": None,
-                })
+        return {
+            "wrestler_id": wrestler_id,
+            "wrestler_name": wrestler_name,
+            "weight_class": weight_class,
+            "matches": matches,
+            "match_count": 0,
+            "http_status": status,
+            "error": html[:5000],
+        }
 
     except Exception as e:
         return {
@@ -775,18 +734,9 @@ async def fetch_flo_profile(wrestler_id, season=None):
             "wrestler_name": wrestler_name,
             "weight_class": weight_class,
             "matches": [],
-            "error": str(e),
             "match_count": 0,
+            "error": str(e),
         }
-
-    return {
-        "wrestler_id": wrestler_id,
-        "wrestler_name": wrestler_name,
-        "weight_class": weight_class,
-        "matches": matches,
-        "match_count": len(matches),
-        "error": None,
-    }
 
 def build_seedit_matches(profiles, weight_override=None):
     seedit_matches = []
