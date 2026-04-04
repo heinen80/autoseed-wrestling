@@ -112,13 +112,13 @@ def avg_win_quality(wrestler: str, history: dict) -> float:
 def build_sos(history):
     sos = {}
     for w in history:
-    opps = history[w]["wins"] + history[w]["losses"]
-    vals = []
-    for o in opps:
-    total = len(history[o]["wins"]) + len(history[o]["losses"])
-    if total:
-    vals.append(len(history[o]["wins"]) / total)
-    sos[w] = round(sum(vals) / len(vals), 3) if vals else 0
+        opps = history[w]["wins"] + history[w]["losses"]
+        vals = []
+        for o in opps:
+            total = len(history[o]["wins"]) + len(history[o]["losses"])
+            if total:
+                vals.append(len(history[o]["wins"]) / total)
+        sos[w] = round(sum(vals) / len(vals), 3) if vals else 0
     return sos
 
 def build_quality(history):
