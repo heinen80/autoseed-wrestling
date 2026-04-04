@@ -607,13 +607,42 @@ def get_votes(weight: str):
 
 # —————————
 
-from playwright.async_api import async_playwright
-from bs4 import BeautifulSoup
+import httpx
 from datetime import datetime
 import re
 import asyncio
+import json
 
 FLO_BASE = "https://flowrestling.org"
+FLO_GRAPHQL = "https://flowrestling.org/api/graphql"
+
+WRESTLER_RESULTS_QUERY = """
+query GetAthleteResults($personId: String!) {
+  person(personId: $personId) {
+    id
+    firstName
+    lastName
+    bouts(first: 200) {
+      edges {
+        node {
+          id
+          boutResult
+          winType
+          opponentFirstName
+          opponentLastName
+          weightClass {
+            name
+          }
+          event {
+            name
+            startDate
+          }
+        }
+      }
+    }
+  }
+}
+"""
 
 # Season runs November through March
 
@@ -669,168 +698,76 @@ def parse_weight_from_text(text):
         return m.group(1)
     return None
 
-async def fetch_flo_profile(wrestler_id, season=None, browser=None):
-    url = f"{FLO_BASE}/nextgen/people/{wrestler_id}?tab=results"
-
+async def fetch_flo_profile(wrestler_id, season=None):
     season_start, season_end = get_season_range(season)
     matches = []
     wrestler_name = None
     weight_class = None
 
-    own_browser = False
-    pw_ctx = None
     try:
-        if browser is None:
-            pw_ctx = await async_playwright().start()
-            browser = await pw_ctx.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox"],
-            )
-            own_browser = True
+        payload = {
+            "query": WRESTLER_RESULTS_QUERY,
+            "variables": {"personId": wrestler_id},
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0",
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(FLO_GRAPHQL, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
 
-        page = await browser.new_page()
-        await page.goto(url, wait_until="networkidle", timeout=30000)
-        html = await page.content()
-        await page.close()
+        person = (data.get("data") or {}).get("person") or {}
+        first = person.get("firstName") or ""
+        last = person.get("lastName") or ""
+        wrestler_name = f"{first} {last}".strip() or wrestler_id
 
-        soup = BeautifulSoup(html, "html.parser")
+        bouts = (person.get("bouts") or {}).get("edges") or []
+        for edge in bouts:
+            node = edge.get("node") or {}
 
-        # Try to get wrestler name from page title or heading
-        name_el = soup.find("h1") or soup.find("h2") or soup.find(class_=re.compile(r'name|title|athlete', re.I))
-        if name_el:
-            wrestler_name = name_el.get_text(strip=True)
+            opp_first = node.get("opponentFirstName") or ""
+            opp_last = node.get("opponentLastName") or ""
+            opponent = f"{opp_first} {opp_last}".strip()
+            if not opponent:
+                continue
 
-        # Try to get weight class from profile header
-        for el in soup.find_all(string=re.compile(r'Weight|Class|lbs', re.I)):
-            w = parse_weight_from_text(el)
-            if w:
-                weight_class = w
-                break
+            win_type = node.get("winType") or ""
+            bout_result = str(node.get("boutResult") or "").upper()
+            won = bout_result in ("WIN", "W", "TRUE", "1")
+            method = map_flo_method(win_type)
 
-        # FloWrestling nextgen pages are React-rendered
-        # The results data may be in a script tag as JSON
-        for script in soup.find_all("script"):
-            src = script.string or ""
-            if "results" in src.lower() and ("dec" in src.lower() or "fall" in src.lower() or "opponent" in src.lower()):
-                # Try to find JSON data blobs
-                json_matches = re.findall(r'\{[^{}]*"result"[^{}]*\}', src, re.IGNORECASE)
-                for jm in json_matches:
-                    try:
-                        import json
-                        obj = json.loads(jm)
-                        # Extract if it looks like a match record
-                        opp = obj.get("opponent") or obj.get("opponentName") or obj.get("name")
-                        result = obj.get("result") or obj.get("method") or obj.get("decision")
-                        won = obj.get("won") or obj.get("win") or obj.get("winner")
-                        if opp and result:
-                            matches.append({
-                                "opponent": str(opp).strip(),
-                                "method": map_flo_method(str(result)),
-                                "won": bool(won),
-                                "tournament": "FloWrestling",
-                                "date": None,
-                            })
-                    except:
-                        pass
+            wc_name = (node.get("weightClass") or {}).get("name") or ""
+            if wc_name and not weight_class:
+                weight_class = parse_weight_from_text(wc_name)
 
-        # Parse HTML table structure (what we can see in the screenshots)
-        # FloWrestling results page groups matches by tournament
-        current_tournament = None
-        current_date = None
+            event = node.get("event") or {}
+            tournament = event.get("name") or "FloWrestling"
+            start_date = event.get("startDate") or ""
 
-        # Find all tournament sections — they appear as headers with tournament name + date
-        # Then match rows follow underneath
-        all_elements = soup.find_all(["div", "tr", "li", "span", "p"])
+            match_date = None
+            if start_date:
+                try:
+                    match_date = datetime.fromisoformat(start_date.rstrip("Z").split("T")[0])
+                except Exception:
+                    pass
 
-        for el in all_elements:
-            text = el.get_text(separator=" ", strip=True)
+            in_season = True
+            if match_date:
+                in_season = season_start <= match_date <= season_end
 
-            # Detect tournament header rows (have a date pattern)
-            date_match = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+20\d{2}', text)
-            if date_match and len(text) < 120:
-                current_date = date_match.group(0)
-                tournament_name = text.replace(current_date, "").strip()
-                if tournament_name:
-                    current_tournament = tournament_name
-
-            # Detect match rows — look for win method keywords
-            method_match = re.search(r'\b(DEC|F|TF|MD|FALL|TECH|MAJOR|DEFAULT|FORFEIT|DQ)\b', text, re.I)
-            if method_match and current_tournament:
-                # Parse the match row
-                # Rows appear to have: Name1 / Team1 / Name2 / Team2 / Method / Score
-                # From screenshots: two names, two teams, result code, score
-                lines = [l.strip() for l in el.get_text(separator="\n").split("\n") if l.strip()]
-                names = []
-                method = method_match.group(1)
-                score = None
-
-                for line in lines:
-                    # Score pattern: digits-digits
-                    if re.match(r'^\d+[\s\-|]\d+$', line):
-                        score = line
-                        continue
-                    # Skip team abbreviations (short all-caps)
-                    if re.match(r'^[A-Z]{2,6}$', line) and len(line) <= 6:
-                        continue
-                    # Skip pure method labels
-                    if line.upper() in ("DEC","F","TF","MD","FALL","TECH","MAJOR","ROUND","RESULTS","NAME","TEAM"):
-                        continue
-                    # Skip round numbers
-                    if re.match(r'^\d+$', line) and int(line) < 20:
-                        continue
-                    # Likely a wrestler name
-                    if len(line) > 3 and re.search(r'[A-Za-z]', line):
-                        names.append(line)
-
-                if len(names) >= 2:
-                    # First name = wrestler on top row (usually subject wrestler)
-                    # Second name = opponent
-                    # Determine who won from score context
-                    # From screenshots: top score 0 means Luke lost, bottom score is opponent's
-                    # Simpler: if wrestler_name in names[0], opponent is names[1]
-                    subj = names[0]
-                    opp  = names[1]
-
-                    # Try to determine win/loss
-                    # Look for score context — from screenshots winner score appears higher
-                    won = None
-                    if score:
-                        parts = re.split(r'[\s\-|]', score)
-                        if len(parts) == 2:
-                            try:
-                                s1, s2 = int(parts[0]), int(parts[1])
-                                won = s1 > s2
-                            except:
-                                pass
-
-                    # Parse date for season filtering
-                    match_date = None
-                    if current_date:
-                        try:
-                            match_date = datetime.strptime(
-                                re.sub(r',', '', current_date).strip(),
-                                "%b %d %Y"
-                            )
-                        except:
-                            try:
-                                match_date = datetime.strptime(current_date.strip(), "%b %d, %Y")
-                            except:
-                                pass
-
-                    # Season filter
-                    in_season = True
-                    if match_date:
-                        in_season = season_start <= match_date <= season_end
-
-                    if in_season:
-                        matches.append({
-                            "opponent": opp,
-                            "method": map_flo_method(method),
-                            "won": won,
-                            "tournament": current_tournament,
-                            "date": current_date,
-                            "score": score,
-                        })
+            if in_season:
+                date_str = match_date.strftime("%b %d, %Y") if match_date else None
+                matches.append({
+                    "opponent": opponent,
+                    "method": method,
+                    "won": won,
+                    "tournament": tournament,
+                    "date": date_str,
+                    "score": None,
+                })
 
     except Exception as e:
         return {
@@ -841,11 +778,6 @@ async def fetch_flo_profile(wrestler_id, season=None, browser=None):
             "error": str(e),
             "match_count": 0,
         }
-    finally:
-        if own_browser and browser:
-            await browser.close()
-        if pw_ctx:
-            await pw_ctx.stop()
 
     return {
         "wrestler_id": wrestler_id,
@@ -922,23 +854,17 @@ async def scrape_flo(request: Request):
         profiles = []
         errors = []
 
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox"],
-            )
-            tasks = []
-            for entry in wrestler_entries:
-                raw = entry.get("url") or entry.get("id") or ""
-                flo_id = extract_flo_id(raw)
-                if not flo_id:
-                    errors.append(f"Could not parse ID from: {raw}")
-                    continue
-                tasks.append(fetch_flo_profile(flo_id, season=season, browser=browser))
+        tasks = []
+        for entry in wrestler_entries:
+            raw = entry.get("url") or entry.get("id") or ""
+            flo_id = extract_flo_id(raw)
+            if not flo_id:
+                errors.append(f"Could not parse ID from: {raw}")
+                continue
+            tasks.append(fetch_flo_profile(flo_id, season=season))
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            await browser.close()
-            for i, r in enumerate(results):
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for i, r in enumerate(results):
                 if isinstance(r, Exception):
                     errors.append(f"Error fetching profile {i}: {str(r)}")
                 else:
