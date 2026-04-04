@@ -842,7 +842,7 @@ async def scrape_flo(request: Request):
     Body:
     {
         "wrestlers": [
-            {"id": "0QBPq4lRlQuIWK71", "name": "Luke Heinen"},
+            {"id": "0QBPq4IRIQuIWK71", "name": "Luke Heinen"},
             {"url": "flowrestling.org/nextgen/people/ABC123", "name": "..."},
             ...
         ],
@@ -940,7 +940,7 @@ async def preview_flo_wrestler(wrestler_id: str, season: str = None):
     """
     Preview a single wrestler's scraped data before running full seeding.
     Useful for confirming the right wrestler was found.
-    GET /scrape/flo/preview/0QBPq4lRlQuIWK71?season=2025-26
+    GET /scrape/flo/preview/0QBPq4IRIQuIWK71?season=2025-26
     """
     try:
         profile = await fetch_flo_profile(wrestler_id, season=season)
