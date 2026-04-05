@@ -608,7 +608,7 @@ def get_votes(weight: str):
 # —————————
 
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 import asyncio
 import json
@@ -915,75 +915,10 @@ async def scrape_flo(request: Request):
                 "tip": "Check that the FloWrestling IDs are correct and wrestlers have current season results"
             }, status_code=200)
 
-        df_all = pd.DataFrame(all_matches)
-        results_out = {}
-
-        for weight, all_group in df_all.groupby("weight"):
-            all_gm = all_group.to_dict(orient="records")
-
-            # Full history: all opponents included so SOS / quality / common-opponent
-            # numbers reflect the wrestlers' complete season records.
-            full_history = build_history(all_gm)
-            full_sos = build_sos(full_history)
-            full_top_wins, full_bad_losses = build_quality(full_history)
-
-            # H2H history: only matches between submitted wrestlers.
-            # Every field wrestler is guaranteed an entry even with 0 H2H matches.
-            h2h_gm = [m for m in h2h_matches
-                      if str(m.get("weight", "")).strip() == str(weight).strip()]
-            h2h_history = build_history(h2h_gm)
-            for fname in field_names:
-                h2h_history.setdefault(fname, {
-                    "wins": [], "losses": [], "win_methods": {}, "loss_methods": {}
-                })
-
-            # Power scores and seeds: only field wrestlers, SOS/quality from full data
-            power_scores = build_power_scores(
-                h2h_history, full_sos, full_top_wins, full_bad_losses
-            )
-            seeds = compute_rankings(power_scores)
-
-            # Common opponents from full season; output filtered to field pairs
-            common = build_common(full_history)
-            common_out = {
-                k: {k2: v2 for k2, v2 in v.items() if k2 in field_names}
-                for k, v in common.items() if k in field_names
-            }
-
-            win_methods = build_win_method_summary(full_history)
-
-            # Confidence and alerts use full_history so H2H and common-opponent
-            # comparisons draw on the complete season record.
-            confidence = build_confidence(
-                seeds, full_history, full_sos, full_top_wins, full_bad_losses, power_scores
-            )
-            controversy_flags, upset_alerts, debate_queue = build_alerts(
-                seeds, full_history, full_sos, full_top_wins, full_bad_losses, confidence, power_scores
-            )
-            # controversy_flags and upset_alerts are plain strings; debate_queue is dicts
-
-            def fs(d):
-                return {k: v for k, v in d.items() if k in field_names}
-
-            results_out[str(weight)] = {
-                "seeds":             [(i + 1, w[0]) for i, w in enumerate(seeds)],
-                "history":           fs(full_history),
-                "sos":               fs(full_sos),
-                "common":            common_out,
-                "confidence":        confidence,
-                "top_wins":          fs(full_top_wins),
-                "bad_losses":        fs(full_bad_losses),
-                "power_scores":      {k: round(v, 1) for k, v in power_scores.items()},
-                "win_methods":       fs(win_methods),
-                "controversy_flags": controversy_flags,
-                "upset_alerts":      upset_alerts,
-                "debate_queue":      debate_queue,
-                "source":            "flo",
-                "profiles_scraped":  len(profiles),
-                "matches_processed": len(h2h_matches),
-                "errors":            errors,
-            }
-
+        results_out = _run_seeding_engine(
+            profiles, all_matches, h2h_matches, field_names,
+            source="flo", errors=errors,
+        )
         return JSONResponse(results_out)
 
     except Exception as e:
@@ -1002,3 +937,515 @@ async def preview_flo_wrestler(wrestler_id: str, season: str = None):
         return JSONResponse(profile)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+# —————————
+
+# Seeding engine helper (shared by /scrape/flo and /scrape/combined)
+
+# —————————
+
+def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
+                        source="flo", errors=None):
+    """
+    Run the seeding engine over a set of profiles and return results_out dict.
+
+    all_matches  — every match row (submitted wrestler vs any opponent); used
+                   for full-season SOS, quality, and common-opponent data.
+    h2h_matches  — only submitted-vs-submitted rows; used for seeding structure.
+    field_names  — set of submitted wrestler names; only these appear as seeds.
+    """
+    if errors is None:
+        errors = []
+
+    df_all = pd.DataFrame(all_matches)
+    results_out = {}
+
+    for weight, all_group in df_all.groupby("weight"):
+        all_gm = all_group.to_dict(orient="records")
+
+        # Full history: all opponents for accurate SOS / quality / common-opponent.
+        full_history = build_history(all_gm)
+        full_sos = build_sos(full_history)
+        full_top_wins, full_bad_losses = build_quality(full_history)
+
+        # H2H history: only submitted-vs-submitted matches.
+        # Guarantee every field wrestler appears even with 0 H2H results.
+        h2h_gm = [m for m in h2h_matches
+                  if str(m.get("weight", "")).strip() == str(weight).strip()]
+        h2h_history = build_history(h2h_gm)
+        for fname in field_names:
+            h2h_history.setdefault(fname, {
+                "wins": [], "losses": [], "win_methods": {}, "loss_methods": {}
+            })
+
+        # Power scores and seeds: only field wrestlers, SOS/quality from full data.
+        power_scores = build_power_scores(
+            h2h_history, full_sos, full_top_wins, full_bad_losses
+        )
+        seeds = compute_rankings(power_scores)
+
+        # Common opponents from full season; outer/inner keys filtered to field.
+        common = build_common(full_history)
+        common_out = {
+            k: {k2: v2 for k2, v2 in v.items() if k2 in field_names}
+            for k, v in common.items() if k in field_names
+        }
+
+        win_methods = build_win_method_summary(full_history)
+
+        # Confidence and alerts use full_history so H2H and common-opponent
+        # comparisons draw on the complete season record.
+        confidence = build_confidence(
+            seeds, full_history, full_sos, full_top_wins, full_bad_losses, power_scores
+        )
+        controversy_flags, upset_alerts, debate_queue = build_alerts(
+            seeds, full_history, full_sos, full_top_wins, full_bad_losses,
+            confidence, power_scores
+        )
+
+        def fs(d):
+            return {k: v for k, v in d.items() if k in field_names}
+
+        results_out[str(weight)] = {
+            "seeds":             [(i + 1, w[0]) for i, w in enumerate(seeds)],
+            "history":           fs(full_history),
+            "sos":               fs(full_sos),
+            "common":            common_out,
+            "confidence":        confidence,
+            "top_wins":          fs(full_top_wins),
+            "bad_losses":        fs(full_bad_losses),
+            "power_scores":      {k: round(v, 1) for k, v in power_scores.items()},
+            "win_methods":       fs(win_methods),
+            "controversy_flags": controversy_flags,
+            "upset_alerts":      upset_alerts,
+            "debate_queue":      debate_queue,
+            "source":            source,
+            "profiles_scraped":  len(profiles),
+            "matches_processed": len(h2h_matches),
+            "errors":            errors,
+        }
+
+    return results_out
+
+# —————————
+
+# Multi-source helpers
+
+# —————————
+
+USAB_API_BASE = "https://api.usabracket.com"
+USAB_HEADERS = {
+    "accept": "application/json",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+}
+
+
+def _norm_name(s):
+    """Lowercase and strip punctuation for fuzzy opponent name matching."""
+    if not s:
+        return ""
+    return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+
+
+def _norm_tournament(s):
+    """Lowercase, strip year and punctuation for tournament dedup."""
+    if not s:
+        return ""
+    s = re.sub(r"\b20\d{2}\b", "", s.lower())
+    s = re.sub(r"[^a-z0-9 ]", "", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _parse_date_str(s):
+    """Parse a date string to datetime. Returns None on failure."""
+    if not s:
+        return None
+    for fmt in ("%b %d, %Y", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(s[:len(fmt)], fmt)
+        except Exception:
+            pass
+    return None
+
+
+def _dates_close(d1_str, d2_str, days=2):
+    """Return True if two date strings are within `days` of each other."""
+    d1 = _parse_date_str(d1_str)
+    d2 = _parse_date_str(d2_str)
+    if d1 is None or d2 is None:
+        return False
+    return abs((d1 - d2).days) <= days
+
+
+def merge_season_matches(flo_matches, usab_matches):
+    """
+    Merge FloWrestling and USA Bracketing match lists, deduplicating bouts that
+    appear on both platforms.
+
+    Dedup key: normalized tournament name overlap + normalized opponent name
+               match + same win/loss result + date within 2 days.
+    Prefers FloWrestling data when a duplicate is detected.
+    """
+    merged = [dict(m, source="flo") for m in flo_matches]
+
+    for um in usab_matches:
+        u_tourn = _norm_tournament(um.get("tournament", ""))
+        u_opp   = _norm_name(um.get("opponent", ""))
+        u_won   = bool(um.get("won"))
+        u_date  = um.get("date")
+
+        is_dupe = False
+        for fm in flo_matches:
+            f_tourn = _norm_tournament(fm.get("tournament", ""))
+            f_opp   = _norm_name(fm.get("opponent", ""))
+            f_won   = bool(fm.get("won"))
+            f_date  = fm.get("date")
+
+            opp_match    = u_opp and f_opp and (u_opp == f_opp or
+                           u_opp in f_opp or f_opp in u_opp)
+            result_match = u_won == f_won
+            tourn_match  = u_tourn and f_tourn and (
+                u_tourn == f_tourn or u_tourn in f_tourn or f_tourn in u_tourn
+            )
+            date_match   = _dates_close(u_date, f_date, days=2)
+
+            if opp_match and result_match and (tourn_match or date_match):
+                is_dupe = True
+                break
+
+        if not is_dupe:
+            merged.append(dict(um, source="usab"))
+
+    return merged
+
+
+async def search_flo_athlete(name, weight=None):
+    """
+    Search FloWrestling for a wrestler by name (and optionally weight class).
+    Returns a list of {source, id, name, weight} dicts.
+    """
+    params = {"name": name}
+    if weight:
+        params["weight"] = str(weight)
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(
+                f"{FLO_API_BASE}/athletes",
+                params=params,
+                headers=FLO_API_HEADERS,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        raw = data.get("data") or []
+        if isinstance(raw, dict):
+            raw = [raw]
+        results = []
+        for a in raw:
+            results.append({
+                "source": "flo",
+                "id":     a.get("coreId") or a.get("id"),
+                "name": (
+                    a.get("name") or
+                    (a.get("firstName", "") + " " + a.get("lastName", "")).strip()
+                ),
+                "weight": str(weight or ""),
+            })
+        return results
+    except Exception as e:
+        return [{"source": "flo", "error": str(e)}]
+
+
+async def search_usab_athlete(name, weight=None, client=None):
+    """
+    Search USA Bracketing for a wrestler by name and weight class.
+    Pass an existing httpx.AsyncClient as `client` for connection reuse.
+    Returns a list of {source, id, name, weight} dicts.
+    """
+    params = {"name": name}
+    if weight:
+        params["weightClass"] = str(weight)
+    own_client = client is None
+    try:
+        if own_client:
+            client = httpx.AsyncClient(timeout=15, follow_redirects=True)
+        resp = await client.get(
+            f"{USAB_API_BASE}/athletes/search",
+            params=params,
+            headers=USAB_HEADERS,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        raw = data.get("data") or data.get("athletes") or []
+        results = []
+        for a in raw:
+            results.append({
+                "source": "usab",
+                "id":     a.get("id"),
+                "name": (
+                    a.get("name") or
+                    (a.get("firstName", "") + " " + a.get("lastName", "")).strip()
+                ),
+                "weight": str(a.get("weightClass") or weight or ""),
+            })
+        return results
+    except Exception as e:
+        return [{"source": "usab", "error": str(e)}]
+    finally:
+        if own_client and client:
+            await client.aclose()
+
+
+async def fetch_usab_profile(wrestler_id, season=None):
+    """
+    Fetch match results from USA Bracketing for a wrestler by ID.
+    Returns the same shape as fetch_flo_profile.
+    """
+    season_start, season_end = get_season_range(season)
+    matches = []
+    wrestler_name = None
+    weight_class = None
+
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(
+                f"{USAB_API_BASE}/athletes/{wrestler_id}/results",
+                headers=USAB_HEADERS,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        profile_root = data.get("data") or data
+        if isinstance(profile_root, dict):
+            wrestler_name = (
+                profile_root.get("name") or
+                " ".join(filter(None, [
+                    profile_root.get("firstName"),
+                    profile_root.get("lastName"),
+                ])).strip() or
+                str(wrestler_id)
+            )
+
+        for event in (data.get("results") or data.get("events") or []):
+            event_name = event.get("name") or event.get("eventName") or "USA Bracketing"
+            for bout in (event.get("bouts") or event.get("boutResults") or []):
+                opp = (
+                    (bout.get("opponent") or {}).get("name") or
+                    bout.get("opponentName") or ""
+                )
+                if not opp:
+                    continue
+
+                won      = bool((bout.get("athlete") or {}).get("isWinner") or bout.get("isWinner"))
+                win_type = str(bout.get("winType") or bout.get("decisionType") or "").upper()
+                method   = WIN_TYPE_MAP.get(win_type, "dec")
+
+                wc = str(bout.get("weight") or event.get("weightClass") or "")
+                if wc and not weight_class:
+                    weight_class = parse_weight_from_text(wc)
+
+                date_str = bout.get("date") or event.get("startDate") or ""
+                match_date = None
+                if date_str:
+                    try:
+                        match_date = datetime.fromisoformat(
+                            date_str.rstrip("Z").split("T")[0]
+                        )
+                    except Exception:
+                        pass
+
+                in_season = True
+                if match_date:
+                    in_season = season_start <= match_date <= season_end
+
+                if in_season:
+                    matches.append({
+                        "opponent":   opp,
+                        "method":     method,
+                        "won":        won,
+                        "tournament": event_name,
+                        "date":       match_date.strftime("%b %d, %Y") if match_date else None,
+                        "score":      None,
+                    })
+
+    except Exception as e:
+        return {
+            "wrestler_id":   str(wrestler_id),
+            "wrestler_name": wrestler_name,
+            "weight_class":  weight_class,
+            "matches":       [],
+            "match_count":   0,
+            "error":         str(e),
+        }
+
+    return {
+        "wrestler_id":   str(wrestler_id),
+        "wrestler_name": wrestler_name,
+        "weight_class":  weight_class,
+        "matches":       matches,
+        "match_count":   len(matches),
+        "error":         None,
+    }
+
+# —————————
+
+# Multi-source endpoints
+
+# —————————
+
+@app.get("/search/athlete")
+async def search_athlete(name: str, weight: str = None):
+    """
+    Search both FloWrestling and USA Bracketing for a wrestler by name.
+    Returns candidate profiles from both platforms for the TD to confirm.
+    GET /search/athlete?name=Luke+Heinen&weight=132
+    """
+    try:
+        flo_res, usab_res = await asyncio.gather(
+            search_flo_athlete(name, weight),
+            search_usab_athlete(name, weight),
+            return_exceptions=True,
+        )
+        if isinstance(flo_res, Exception):
+            flo_res = [{"source": "flo", "error": str(flo_res)}]
+        if isinstance(usab_res, Exception):
+            usab_res = [{"source": "usab", "error": str(usab_res)}]
+        return JSONResponse({"flo": flo_res, "usab": usab_res})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/scrape/combined")
+async def scrape_combined(request: Request):
+    """
+    Multi-source season scrape: search FloWrestling and USA Bracketing by
+    wrestler name, merge and deduplicate matches, then seed.
+
+    Body:
+    {
+        "wrestlers": [
+            {"name": "Luke Heinen",  "weight": "132"},
+            {"name": "Rein Meitler", "weight": "132"}
+        ],
+        "weight":  "132",      // optional global override
+        "season":  "2025-26"   // optional, defaults to current season
+    }
+    """
+    try:
+        body = await request.json()
+        wrestler_entries = body.get("wrestlers", [])
+        weight_override  = body.get("weight", None)
+        season           = body.get("season", None)
+
+        if not wrestler_entries:
+            return JSONResponse({"error": "No wrestlers provided"}, status_code=400)
+
+        profiles = []
+        errors   = []
+
+        for entry in wrestler_entries:
+            name   = (entry.get("name") or "").strip()
+            weight = entry.get("weight") or weight_override
+            if not name:
+                errors.append("Skipped entry with no name")
+                continue
+
+            # Search both platforms in parallel
+            flo_hits, usab_hits = await asyncio.gather(
+                search_flo_athlete(name, weight),
+                search_usab_athlete(name, weight),
+                return_exceptions=True,
+            )
+            if isinstance(flo_hits, Exception):
+                flo_hits = []
+            if isinstance(usab_hits, Exception):
+                usab_hits = []
+
+            # Pick best match: first hit whose name loosely matches the query
+            norm_query = _norm_name(name)
+
+            flo_id = None
+            for hit in (flo_hits or []):
+                if hit.get("id") and _norm_name(hit.get("name", "")) and (
+                    norm_query in _norm_name(hit.get("name", "")) or
+                    _norm_name(hit.get("name", "")) in norm_query
+                ):
+                    flo_id = hit["id"]
+                    break
+            if not flo_id and flo_hits and flo_hits[0].get("id"):
+                flo_id = flo_hits[0]["id"]
+
+            usab_id = None
+            for hit in (usab_hits or []):
+                if hit.get("id") and _norm_name(hit.get("name", "")) and (
+                    norm_query in _norm_name(hit.get("name", "")) or
+                    _norm_name(hit.get("name", "")) in norm_query
+                ):
+                    usab_id = hit["id"]
+                    break
+            if not usab_id and usab_hits and usab_hits[0].get("id"):
+                usab_id = usab_hits[0]["id"]
+
+            # Fetch full season profiles in parallel
+            flo_profile, usab_profile = await asyncio.gather(
+                fetch_flo_profile(flo_id, season=season) if flo_id else asyncio.sleep(0),
+                fetch_usab_profile(usab_id, season=season) if usab_id else asyncio.sleep(0),
+                return_exceptions=True,
+            )
+            if isinstance(flo_profile, Exception) or not isinstance(flo_profile, dict):
+                flo_profile = None
+            if isinstance(usab_profile, Exception) or not isinstance(usab_profile, dict):
+                usab_profile = None
+
+            flo_matches  = (flo_profile  or {}).get("matches", [])
+            usab_matches = (usab_profile or {}).get("matches", [])
+            merged       = merge_season_matches(flo_matches, usab_matches)
+
+            wrestler_name = (
+                (flo_profile  or {}).get("wrestler_name") or
+                (usab_profile or {}).get("wrestler_name") or
+                name
+            )
+            weight_class = (
+                (flo_profile  or {}).get("weight_class") or
+                (usab_profile or {}).get("weight_class") or
+                weight or "Unknown"
+            )
+
+            if not merged:
+                errors.append(f"No season matches found for {name}")
+
+            profiles.append({
+                "wrestler_id":   flo_id or usab_id or name,
+                "wrestler_name": wrestler_name,
+                "weight_class":  str(weight_class).replace(" lbs", "").strip(),
+                "matches":       merged,
+                "match_count":   len(merged),
+                "flo_id":        flo_id,
+                "usab_id":       usab_id,
+                "error":         None,
+            })
+
+        if not profiles:
+            return JSONResponse({"error": "No wrestler profiles could be built", "errors": errors}, status_code=400)
+
+        field_names  = {p.get("wrestler_name") or p.get("wrestler_id") for p in profiles}
+        all_matches  = build_seedit_matches(profiles, weight_override)
+        h2h_matches  = build_seedit_matches(profiles, weight_override, field_names=field_names)
+
+        if not all_matches:
+            return JSONResponse({
+                "error":    "No match data found for the current season",
+                "profiles": profiles,
+                "errors":   errors,
+                "tip":      "Check wrestler names and season filter",
+            }, status_code=200)
+
+        results_out = _run_seeding_engine(
+            profiles, all_matches, h2h_matches, field_names,
+            source="combined", errors=errors,
+        )
+        return JSONResponse(results_out)
+
+    except Exception as e:
+        import traceback
+        return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
