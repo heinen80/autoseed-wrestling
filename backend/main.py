@@ -1124,19 +1124,23 @@ def merge_season_matches(flo_matches, usab_matches):
 async def search_flo_athlete(name, weight=None):
     """
     Search FloWrestling for a wrestler by name.
-    POST /api/search with {query, context, domain, entities} — validated from 400 error response.
-    domain must be "11FloWrestling000"; entities must be an array (e.g. ["person"]).
+    POST /api/search — HAR-verified payload: domain, search, offsetPerGroup, limitPerGroup, entities.
     Response: data[].items[] with ofpId, title ("Lastname, Firstname"), metadata2 (location).
     Returns up to 5 matches as {source, id, name, location, weight} dicts.
     Weight is only used as a label — not a search filter.
     """
     headers = dict(FLO_API_HEADERS)
     headers["content-type"] = "application/json"
-    payload = {"query": name, "context": "search", "domain": "11FloWrestling000", "entities": ["person"]}
+    payload = {
+        "domain": "11FloWrestling000",
+        "offsetPerGroup": 0,
+        "search": name,
+        "limitPerGroup": 20,
+        "entities": ["person"],
+    }
     print("=== search_flo_athlete DEBUG ===")
     print(f"URL:     {FLO_SEARCH_URL}")
-    print(f"HEADERS: {json.dumps(headers, indent=2)}")
-    print(f"BODY:    {json.dumps(payload, indent=2)}")
+    print(f"PAYLOAD: {json.dumps(payload)}")
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             resp = await client.post(FLO_SEARCH_URL, json=payload, headers=headers)
