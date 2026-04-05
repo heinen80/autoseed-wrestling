@@ -1025,13 +1025,13 @@
 
     <!-- IMPORT TABS -->
     <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
-      <button class="import-tab active" onclick="switchTab('csv')" id="tab-csv">CSV Upload</button>
-      <button class="import-tab" onclick="switchTab('season')" id="tab-season">Season Import</button>
+      <button class="import-tab" onclick="switchTab('csv')" id="tab-csv">CSV Upload</button>
+      <button class="import-tab active" onclick="switchTab('season')" id="tab-season">Season Import</button>
       <button class="import-tab" onclick="switchTab('demo')" id="tab-demo">Demo Data</button>
     </div>
 
     <!-- CSV TAB -->
-    <div id="panel-csv">
+    <div id="panel-csv" style="display:none;">
       <div class="upload-zone" id="upload-zone"
         onclick="document.getElementById('file').click()"
         ondragover="event.preventDefault(); this.classList.add('drag-over')"
@@ -1050,7 +1050,7 @@
     </div>
 
     <!-- SEASON IMPORT TAB -->
-    <div id="panel-season" style="display:none;">
+    <div id="panel-season">
       <div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;overflow:hidden;">
 
         <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
@@ -2574,9 +2574,11 @@ async function searchAthlete() {
       const dispName = hit.name || '(unknown)';
       const floTag   = card.flo  ? '<span style="color:var(--gold);">FloWrestling</span>'  : '<span style="color:var(--muted);">Flo: none</span>';
       const usabTag  = card.usab ? '<span style="color:var(--green);">USA Bracketing</span>' : '<span style="color:var(--muted);">USAB: none</span>';
+      const location = (card.flo && card.flo.location) || (card.usab && card.usab.location) || '';
       html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
         + '<div style="flex:1;">'
         + '<div style="font-size:13px;font-weight:600;">' + dispName + '</div>'
+        + (location ? '<div style="font-size:11px;color:var(--muted2);margin-top:1px;">' + location + '</div>' : '')
         + '<div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:2px;">' + floTag + ' &nbsp;|&nbsp; ' + usabTag + '</div>'
         + '</div>'
         + '<button class="btn btn-ghost btn-sm" onclick="siAddWrestler(' + idx + ')">+ Add</button>'
