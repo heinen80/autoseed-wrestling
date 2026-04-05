@@ -730,7 +730,14 @@ async def fetch_flo_profile(wrestler_id, season=None):
             )
             athlete_resp.raise_for_status()
             athlete_data = athlete_resp.json()
-            wrestler_name = athlete_data.get("name") or wrestler_id
+            wrestler_name = (
+                athlete_data.get("name") or
+                " ".join(filter(None, [
+                    athlete_data.get("firstName"),
+                    athlete_data.get("lastName"),
+                ])).strip() or
+                wrestler_id
+            )
 
             # Fetch match results
             results_resp = await client.get(
@@ -872,17 +879,26 @@ async def scrape_flo(request: Request):
             tasks.append(fetch_flo_profile(flo_id, season=season))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        valid_entries = [e for e in wrestler_entries if extract_flo_id(e.get("url") or e.get("id") or "")]
         for i, r in enumerate(results):
-                if isinstance(r, Exception):
-                    errors.append(f"Error fetching profile {i}: {str(r)}")
-                else:
-                    # Override name if provided
-                    entry = wrestler_entries[i] if i < len(wrestler_entries) else {}
-                    if entry.get("name") and not r.get("wrestler_name"):
-                        r["wrestler_name"] = entry["name"]
-                    profiles.append(r)
+            if isinstance(r, Exception):
+                errors.append(f"Error fetching profile {i}: {str(r)}")
+            else:
+                # Use manually provided name if API returned only the ID as fallback
+                entry = valid_entries[i] if i < len(valid_entries) else {}
+                if entry.get("name") and (
+                    not r.get("wrestler_name") or r.get("wrestler_name") == r.get("wrestler_id")
+                ):
+                    r["wrestler_name"] = entry["name"]
+                profiles.append(r)
 
-        # Build SeedIT match format
+        # Names of submitted wrestlers — only these should appear as seeds
+        submitted_names = {
+            p.get("wrestler_name") or p.get("wrestler_id")
+            for p in profiles
+        }
+
+        # Build SeedIT match format (all matches kept for full SOS/quality data)
         all_matches = build_seedit_matches(profiles, weight_override)
 
         if not all_matches:
@@ -899,6 +915,8 @@ async def scrape_flo(request: Request):
 
         for weight, group in df.groupby("weight"):
             gm = group.to_dict(orient="records")
+            # Build history for ALL wrestlers (submitted + opponents) so SOS,
+            # quality, and common-opponent calculations use complete data.
             history = build_history(gm)
             sos = build_sos(history)
             top_wins, bad_losses = build_quality(history)
@@ -910,19 +928,35 @@ async def scrape_flo(request: Request):
             controversy_flags, upset_alerts, debate_queue = build_alerts(
                 seeds, history, sos, top_wins, bad_losses, confidence, power_scores
             )
+
+            # Filter every output dict to submitted wrestlers only.
+            # Calculations above used full history so the numbers are correct.
+            def f(d):
+                return {k: v for k, v in d.items() if k in submitted_names}
+
+            seeds_filtered = [s for s in seeds if s[0] in submitted_names]
+            common_filtered = {
+                k: {k2: v2 for k2, v2 in v.items() if k2 in submitted_names}
+                for k, v in common.items() if k in submitted_names
+            }
+            controversy_filtered = [x for x in controversy_flags if x.get("wrestler") in submitted_names]
+            upset_filtered = [x for x in upset_alerts if x.get("wrestler") in submitted_names]
+            debate_filtered = [x for x in debate_queue
+                               if x.get("higher") in submitted_names or x.get("lower") in submitted_names]
+
             results_out[str(weight)] = {
-                "seeds": [(i + 1, w[0]) for i, w in enumerate(seeds)],
-                "history": history,
-                "sos": sos,
-                "common": common,
-                "confidence": confidence,
-                "top_wins": top_wins,
-                "bad_losses": bad_losses,
-                "power_scores": {k: round(v, 1) for k, v in power_scores.items()},
-                "win_methods": win_methods,
-                "controversy_flags": controversy_flags,
-                "upset_alerts": upset_alerts,
-                "debate_queue": debate_queue,
+                "seeds": [(i + 1, w[0]) for i, w in enumerate(seeds_filtered)],
+                "history": f(history),
+                "sos": f(sos),
+                "common": common_filtered,
+                "confidence": f(confidence),
+                "top_wins": f(top_wins),
+                "bad_losses": f(bad_losses),
+                "power_scores": {k: round(v, 1) for k, v in f(power_scores).items()},
+                "win_methods": f(win_methods),
+                "controversy_flags": controversy_filtered,
+                "upset_alerts": upset_filtered,
+                "debate_queue": debate_filtered,
                 "source": "flo",
                 "profiles_scraped": len(profiles),
                 "matches_processed": len(all_matches),
