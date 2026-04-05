@@ -803,15 +803,15 @@ async def fetch_flo_profile(wrestler_id, season=None):
         "error": None,
     }
 
-def build_seedit_matches(profiles, weight_override=None):
-    seedit_matches = []
-    name_map = {}
+def build_seedit_matches(profiles, weight_override=None, field_names=None):
+    """
+    Build match rows from submitted wrestler profiles.
 
-    # Build name->profile map
-    for p in profiles:
-        name = p.get("wrestler_name") or p.get("wrestler_id")
-        if name:
-            name_map[p["wrestler_id"]] = name
+    field_names: if provided, only emit rows where BOTH wrestlers are in
+    the set (head-to-head matches only). When None, all matches are emitted
+    (used for full SOS / quality calculations).
+    """
+    seedit_matches = []
 
     for p in profiles:
         wrestler_name = p.get("wrestler_name") or p.get("wrestler_id")
@@ -823,9 +823,12 @@ def build_seedit_matches(profiles, weight_override=None):
             won = m.get("won")
             if not opp or won is None:
                 continue
+            # When field_names is set, skip matches against non-field opponents
+            if field_names is not None and opp not in field_names:
+                continue
             winner = wrestler_name if won else opp
             seedit_matches.append({
-                "weight": str(weight).replace(" lbs","").strip(),
+                "weight": str(weight).replace(" lbs", "").strip(),
                 "wrestlerA": wrestler_name,
                 "wrestlerB": opp,
                 "winner": winner,
@@ -892,14 +895,16 @@ async def scrape_flo(request: Request):
                     r["wrestler_name"] = entry["name"]
                 profiles.append(r)
 
-        # Names of submitted wrestlers — only these should appear as seeds
-        submitted_names = {
+        # Field wrestlers: only these appear as seeds
+        field_names = {
             p.get("wrestler_name") or p.get("wrestler_id")
             for p in profiles
         }
 
-        # Build SeedIT match format (all matches kept for full SOS/quality data)
+        # All matches: used to build full season history for SOS / quality / common opponents
         all_matches = build_seedit_matches(profiles, weight_override)
+        # H2H matches: only submitted-vs-submitted, used for seeding structure
+        h2h_matches = build_seedit_matches(profiles, weight_override, field_names=field_names)
 
         if not all_matches:
             return JSONResponse({
@@ -909,58 +914,73 @@ async def scrape_flo(request: Request):
                 "tip": "Check that the FloWrestling IDs are correct and wrestlers have current season results"
             }, status_code=200)
 
-        # Run through seeding engine
-        df = pd.DataFrame(all_matches)
+        df_all = pd.DataFrame(all_matches)
         results_out = {}
 
-        for weight, group in df.groupby("weight"):
-            gm = group.to_dict(orient="records")
-            # Build history for ALL wrestlers (submitted + opponents) so SOS,
-            # quality, and common-opponent calculations use complete data.
-            history = build_history(gm)
-            sos = build_sos(history)
-            top_wins, bad_losses = build_quality(history)
-            power_scores = build_power_scores(history, sos, top_wins, bad_losses)
-            seeds = compute_rankings(power_scores)
-            common = build_common(history)
-            win_methods = build_win_method_summary(history)
-            confidence = build_confidence(seeds, history, sos, top_wins, bad_losses, power_scores)
-            controversy_flags, upset_alerts, debate_queue = build_alerts(
-                seeds, history, sos, top_wins, bad_losses, confidence, power_scores
+        for weight, all_group in df_all.groupby("weight"):
+            all_gm = all_group.to_dict(orient="records")
+
+            # Full history: all opponents included so SOS / quality / common-opponent
+            # numbers reflect the wrestlers' complete season records.
+            full_history = build_history(all_gm)
+            full_sos = build_sos(full_history)
+            full_top_wins, full_bad_losses = build_quality(full_history)
+
+            # H2H history: only matches between submitted wrestlers.
+            # Every field wrestler is guaranteed an entry even with 0 H2H matches.
+            h2h_gm = [m for m in h2h_matches
+                      if str(m.get("weight", "")).strip() == str(weight).strip()]
+            h2h_history = build_history(h2h_gm)
+            for fname in field_names:
+                h2h_history.setdefault(fname, {
+                    "wins": [], "losses": [], "win_methods": {}, "loss_methods": {}
+                })
+
+            # Power scores and seeds: only field wrestlers, SOS/quality from full data
+            power_scores = build_power_scores(
+                h2h_history, full_sos, full_top_wins, full_bad_losses
             )
+            seeds = compute_rankings(power_scores)
 
-            # Filter every output dict to submitted wrestlers only.
-            # Calculations above used full history so the numbers are correct.
-            def f(d):
-                return {k: v for k, v in d.items() if k in submitted_names}
-
-            seeds_filtered = [s for s in seeds if s[0] in submitted_names]
-            common_filtered = {
-                k: {k2: v2 for k2, v2 in v.items() if k2 in submitted_names}
-                for k, v in common.items() if k in submitted_names
+            # Common opponents from full season; output filtered to field pairs
+            common = build_common(full_history)
+            common_out = {
+                k: {k2: v2 for k2, v2 in v.items() if k2 in field_names}
+                for k, v in common.items() if k in field_names
             }
-            controversy_filtered = [x for x in controversy_flags if x.get("wrestler") in submitted_names]
-            upset_filtered = [x for x in upset_alerts if x.get("wrestler") in submitted_names]
-            debate_filtered = [x for x in debate_queue
-                               if x.get("higher") in submitted_names or x.get("lower") in submitted_names]
+
+            win_methods = build_win_method_summary(full_history)
+
+            # Confidence and alerts use full_history so H2H and common-opponent
+            # comparisons draw on the complete season record.
+            confidence = build_confidence(
+                seeds, full_history, full_sos, full_top_wins, full_bad_losses, power_scores
+            )
+            controversy_flags, upset_alerts, debate_queue = build_alerts(
+                seeds, full_history, full_sos, full_top_wins, full_bad_losses, confidence, power_scores
+            )
+            # controversy_flags and upset_alerts are plain strings; debate_queue is dicts
+
+            def fs(d):
+                return {k: v for k, v in d.items() if k in field_names}
 
             results_out[str(weight)] = {
-                "seeds": [(i + 1, w[0]) for i, w in enumerate(seeds_filtered)],
-                "history": f(history),
-                "sos": f(sos),
-                "common": common_filtered,
-                "confidence": f(confidence),
-                "top_wins": f(top_wins),
-                "bad_losses": f(bad_losses),
-                "power_scores": {k: round(v, 1) for k, v in f(power_scores).items()},
-                "win_methods": f(win_methods),
-                "controversy_flags": controversy_filtered,
-                "upset_alerts": upset_filtered,
-                "debate_queue": debate_filtered,
-                "source": "flo",
-                "profiles_scraped": len(profiles),
-                "matches_processed": len(all_matches),
-                "errors": errors,
+                "seeds":             [(i + 1, w[0]) for i, w in enumerate(seeds)],
+                "history":           fs(full_history),
+                "sos":               fs(full_sos),
+                "common":            common_out,
+                "confidence":        confidence,
+                "top_wins":          fs(full_top_wins),
+                "bad_losses":        fs(full_bad_losses),
+                "power_scores":      {k: round(v, 1) for k, v in power_scores.items()},
+                "win_methods":       fs(win_methods),
+                "controversy_flags": controversy_flags,
+                "upset_alerts":      upset_alerts,
+                "debate_queue":      debate_queue,
+                "source":            "flo",
+                "profiles_scraped":  len(profiles),
+                "matches_processed": len(h2h_matches),
+                "errors":            errors,
             }
 
         return JSONResponse(results_out)
