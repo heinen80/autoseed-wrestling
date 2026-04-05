@@ -68,11 +68,11 @@ def root():
 def build_history(matches):
     """
     Build per-wrestler win/loss history.
-    Now also tracks win_methods: {opponent: method_points} for each win.
+    Tracks win_methods/loss_methods (method points) and win_dates/loss_dates
+    (date strings, may be None) for recency weighting.
 
-    ```
     CSV columns expected:
-        weight, wrestlerA, wrestlerB, winner, method (optional)
+        weight, wrestlerA, wrestlerB, winner, method (optional), date (optional)
 
     method examples: fall, pin, tf, tech fall, md, major decision, dec, decision
     """
@@ -83,22 +83,35 @@ def build_history(matches):
         w2     = str(m["wrestlerB"]).strip()
         winner = str(m["winner"]).strip()
         method = str(m.get("method", "")).strip()
+        date   = m.get("date")
 
-        history.setdefault(w1, {"wins": [], "losses": [], "win_methods": {}, "loss_methods": {}})
-        history.setdefault(w2, {"wins": [], "losses": [], "win_methods": {}, "loss_methods": {}})
+        history.setdefault(w1, {
+            "wins": [], "losses": [],
+            "win_methods": {}, "loss_methods": {},
+            "win_dates": {}, "loss_dates": {},
+        })
+        history.setdefault(w2, {
+            "wins": [], "losses": [],
+            "win_methods": {}, "loss_methods": {},
+            "win_dates": {}, "loss_dates": {},
+        })
 
         pts = get_method_points(method)
 
         if winner == w1:
             history[w1]["wins"].append(w2)
-            history[w1]["win_methods"][w2] = pts       # how w1 beat w2
+            history[w1]["win_methods"][w2] = pts
+            history[w1]["win_dates"][w2]   = date
             history[w2]["losses"].append(w1)
-            history[w2]["loss_methods"][w1] = pts      # how w2 lost to w1
+            history[w2]["loss_methods"][w1] = pts
+            history[w2]["loss_dates"][w1]   = date
         else:
             history[w2]["wins"].append(w1)
             history[w2]["win_methods"][w1] = pts
+            history[w2]["win_dates"][w1]   = date
             history[w1]["losses"].append(w2)
             history[w1]["loss_methods"][w2] = pts
+            history[w1]["loss_dates"][w2]   = date
 
     return history
 
@@ -109,15 +122,24 @@ def avg_win_quality(wrestler: str, history: dict) -> float:
         return 0.0
     return sum(methods.values()) / len(methods)
 
+_SOS_MIN_OPPONENT_MATCHES = 4  # opponents with fewer matches are excluded as likely backups
+
 def build_sos(history):
+    """
+    Strength of schedule: average win-rate of opponents faced.
+    Excludes opponents with fewer than 4 total matches (backup exclusion).
+    """
     sos = {}
     for w in history:
         opps = history[w]["wins"] + history[w]["losses"]
         vals = []
         for o in opps:
+            if o not in history:
+                continue
             total = len(history[o]["wins"]) + len(history[o]["losses"])
-            if total:
-                vals.append(len(history[o]["wins"]) / total)
+            if total < _SOS_MIN_OPPONENT_MATCHES:
+                continue  # exclude backups / sparse opponents
+            vals.append(len(history[o]["wins"]) / total)
         sos[w] = round(sum(vals) / len(vals), 3) if vals else 0
     return sos
 
@@ -177,20 +199,49 @@ def build_common(history):
             common[w1][w2] = rows
     return common
 
-def build_power_scores(history, sos, top_wins, bad_losses):
-    """
-    Unified power score — identical weighting to compare_breakdown()
-    so seeds and comparisons never contradict each other.
+_RECENCY_DAYS       = 45   # matches within this many days count as recent
+_RECENCY_MULTIPLIER = 1.2  # recent matches weighted 1.2x; older matches 1.0x (no penalty)
 
-    ```
+def _recency_mult(date_val):
+    """Return 1.2 if date_val is within the last 45 days, else 1.0."""
+    if not date_val:
+        return 1.0
+    try:
+        if isinstance(date_val, str):
+            for fmt in ("%b %d, %Y", "%Y-%m-%d", "%m/%d/%Y"):
+                try:
+                    d = datetime.strptime(date_val, fmt)
+                    break
+                except ValueError:
+                    continue
+            else:
+                return 1.0
+        else:
+            d = date_val
+        if (datetime.now() - d).days <= _RECENCY_DAYS:
+            return _RECENCY_MULTIPLIER
+    except Exception:
+        pass
+    return 1.0
+
+def build_power_scores(history, sos, top_wins, bad_losses, field_match_avg=None):
+    """
+    Unified power score — identical weighting to compare_breakdown().
+
     Components (max ~100):
         win %            × 30   → 0–30
         win quality avg  × 4    → 0–24   (fall=6, tf=5, md=4, dec=3)
-        opponent quality × 8    per win  (opponent win %)
-        opponent quality × 6    penalty per loss (based on how weak the opp is)
-        SOS              × 15   → 0–15
+        opponent quality × 8    per win, recency-weighted (×1.2 if ≤45 days old)
+        opponent quality × 8    penalty per loss, recency-weighted
+        SOS              × 15   × field-relative confidence weight (0.7 / 0.85 / 1.0)
         top wins         × 2    each
         bad losses       × 2    penalty each
+
+    field_match_avg: average match count across all field wrestlers in this weight.
+        Used for field-relative SOS confidence:
+        < 50% of avg → SOS weight 0.7x (low confidence)
+        50–80% of avg → SOS weight 0.85x
+        ≥ 80% of avg → SOS weight 1.0x (full)
     """
     scores = {}
 
@@ -200,6 +251,21 @@ def build_power_scores(history, sos, top_wins, bad_losses):
         total  = wins + losses
         win_pct = wins / total if total else 0
 
+        # Field-relative SOS confidence weight
+        if field_match_avg and field_match_avg > 0:
+            ratio = total / field_match_avg
+            if ratio < 0.5:
+                sos_weight = 0.7
+            elif ratio < 0.8:
+                sos_weight = 0.85
+            else:
+                sos_weight = 1.0
+        else:
+            sos_weight = 1.0
+
+        win_dates  = history[w].get("win_dates",  {})
+        loss_dates = history[w].get("loss_dates", {})
+
         score = 0.0
 
         # 1. Win percentage baseline
@@ -208,25 +274,29 @@ def build_power_scores(history, sos, top_wins, bad_losses):
         # 2. Average win quality (method-based)
         score += avg_win_quality(w, history) * 4
 
-        # 3. Opponent quality on wins (beat good people = more points)
+        # 3. Opponent quality on wins — recency-weighted
         for opp in history[w]["wins"]:
+            if opp not in history:
+                continue
             opp_total = len(history[opp]["wins"]) + len(history[opp]["losses"])
             if opp_total:
                 opp_pct = len(history[opp]["wins"]) / opp_total
-                # scale by both opponent quality AND how you beat them
                 method_pts = history[w]["win_methods"].get(opp, 3.0)
-                score += opp_pct * 8 * (method_pts / 6.0)
+                recency = _recency_mult(win_dates.get(opp))
+                score += opp_pct * 8 * (method_pts / 6.0) * recency
 
-        # 4. Penalty for losses (losing to weak opponents hurts more)
+        # 4. Penalty for losses — recency-weighted
         for opp in history[w]["losses"]:
+            if opp not in history:
+                continue
             opp_total = len(history[opp]["wins"]) + len(history[opp]["losses"])
             if opp_total:
                 opp_pct = len(history[opp]["wins"]) / opp_total
-                # losing to a .300 wrestler = big penalty; losing to a .700 = small
-                score -= (1 - opp_pct) * 8
+                recency = _recency_mult(loss_dates.get(opp))
+                score -= (1 - opp_pct) * 8 * recency
 
-        # 5. Strength of schedule
-        score += sos[w] * 15
+        # 5. Strength of schedule — field-relative confidence weight
+        score += sos[w] * 15 * sos_weight
 
         # 6. Top wins bonus / bad loss penalty
         score += len(top_wins[w]) * 2
@@ -481,6 +551,86 @@ def build_alerts(seeds, history, sos, top_wins, bad_losses, confidence, power_sc
 
     return controversy_flags, upset_alerts, debate_queue
 
+def detect_circular_h2h(history, field_names, sos, power_scores):
+    """
+    Find groups of 3 field wrestlers where A beat B, B beat C, C beat A.
+    Resolve each circle by:
+      1. Common opponents (most shared-opponent wins)
+      2. Win quality (avg method points)
+      3. Strength of schedule
+    Returns list of dicts: {circle, resolution_order, resolved_by}.
+    """
+    field = [n for n in field_names if n in history]
+    seen  = set()
+    circles = []
+
+    for a in field:
+        for b in field:
+            if b == a or b not in history[a]["wins"]:
+                continue
+            for c in field:
+                if c == a or c == b:
+                    continue
+                if c not in history[b]["wins"]:
+                    continue
+                if a not in history[c]["wins"]:
+                    continue
+                key = frozenset([a, b, c])
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                wrestlers = [a, b, c]
+
+                # 1. Common opponents — count wins against opponents all three faced
+                shared = (
+                    set(history[a]["wins"] + history[a]["losses"]) &
+                    set(history[b]["wins"] + history[b]["losses"]) &
+                    set(history[c]["wins"] + history[c]["losses"])
+                )
+                common_wins = {
+                    w: sum(1 for o in shared if o in history[w]["wins"])
+                    for w in wrestlers
+                }
+                if len(set(common_wins.values())) > 1:
+                    resolved = sorted(wrestlers, key=lambda w: common_wins[w], reverse=True)
+                    method   = "common opponents"
+                else:
+                    # 2. Win quality
+                    wq = {w: avg_win_quality(w, history) for w in wrestlers}
+                    if len({round(v, 1) for v in wq.values()}) > 1:
+                        resolved = sorted(wrestlers, key=lambda w: wq[w], reverse=True)
+                        method   = "win quality"
+                    else:
+                        # 3. SOS
+                        resolved = sorted(wrestlers, key=lambda w: sos.get(w, 0), reverse=True)
+                        method   = "strength of schedule"
+
+                circles.append({
+                    "circle":           f"{a} beat {b}, {b} beat {c}, {c} beat {a}",
+                    "resolution_order": resolved,
+                    "resolved_by":      method,
+                })
+
+    return circles
+
+def build_field_top_half_matches(full_history, seeds, field_names):
+    """
+    For each field wrestler, count how many unique opponents they faced this
+    season who ranked in the top half of the seeded field.
+    Returns {wrestler_name: count}.
+    """
+    n        = len(seeds)
+    top_half = {name for i, (name, _) in enumerate(seeds) if i < (n + 1) // 2}
+    result   = {}
+    for name in field_names:
+        if name not in full_history:
+            result[name] = 0
+            continue
+        opps = set(full_history[name]["wins"] + full_history[name]["losses"])
+        result[name] = len(opps & top_half)
+    return result
+
 # —————————
 
 # upload
@@ -511,30 +661,45 @@ async def upload(request: Request, file: UploadFile = File(None)):
             history      = build_history(gm)
             sos          = build_sos(history)
             top_wins, bad_losses = build_quality(history)
-            power_scores = build_power_scores(history, sos, top_wins, bad_losses)
+
+            match_counts = [
+                len(history[n]["wins"]) + len(history[n]["losses"])
+                for n in history
+            ]
+            field_match_avg = sum(match_counts) / len(match_counts) if match_counts else None
+
+            power_scores = build_power_scores(
+                history, sos, top_wins, bad_losses,
+                field_match_avg=field_match_avg,
+            )
             seeds        = compute_rankings(power_scores)
             common       = build_common(history)
             win_methods  = build_win_method_summary(history)
 
-            # confidence and alerts now use power_scores for tiebreaking
             confidence   = build_confidence(seeds, history, sos, top_wins, bad_losses, power_scores)
             controversy_flags, upset_alerts, debate_queue = build_alerts(
                 seeds, history, sos, top_wins, bad_losses, confidence, power_scores
             )
+            field_names_csv  = set(history.keys())
+            circular_h2h     = detect_circular_h2h(history, field_names_csv, sos, power_scores)
+            matches_vs_top_half = build_field_top_half_matches(history, seeds, field_names_csv)
 
             results[str(weight)] = {
-                "seeds":              [(i + 1, w[0]) for i, w in enumerate(seeds)],
-                "history":            history,
-                "sos":                sos,
-                "common":             common,
-                "confidence":         confidence,
-                "top_wins":           top_wins,
-                "bad_losses":         bad_losses,
-                "power_scores":       {k: round(v, 1) for k, v in power_scores.items()},
-                "win_methods":        win_methods,   # NEW — per-wrestler method breakdown
-                "controversy_flags":  controversy_flags,
-                "upset_alerts":       upset_alerts,
-                "debate_queue":       debate_queue,
+                "seeds":               [(i + 1, w[0]) for i, w in enumerate(seeds)],
+                "history":             history,
+                "sos":                 sos,
+                "common":              common,
+                "confidence":          confidence,
+                "top_wins":            top_wins,
+                "bad_losses":          bad_losses,
+                "power_scores":        {k: round(v, 1) for k, v in power_scores.items()},
+                "win_methods":         win_methods,
+                "controversy_flags":   controversy_flags,
+                "upset_alerts":        upset_alerts,
+                "debate_queue":        debate_queue,
+                "circular_h2h":        circular_h2h,
+                "matches_vs_top_half": matches_vs_top_half,
+                "field_match_avg":     round(field_match_avg, 1) if field_match_avg else None,
             }
 
         return JSONResponse(results)
@@ -831,11 +996,12 @@ def build_seedit_matches(profiles, weight_override=None, field_names=None):
                 continue
             winner = wrestler_name if won else opp
             seedit_matches.append({
-                "weight": str(weight).replace(" lbs", "").strip(),
+                "weight":    str(weight).replace(" lbs", "").strip(),
                 "wrestlerA": wrestler_name,
                 "wrestlerB": opp,
-                "winner": winner,
-                "method": method,
+                "winner":    winner,
+                "method":    method,
+                "date":      m.get("date"),
             })
 
     return seedit_matches
@@ -977,12 +1143,25 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
         h2h_history = build_history(h2h_gm)
         for fname in field_names:
             h2h_history.setdefault(fname, {
-                "wins": [], "losses": [], "win_methods": {}, "loss_methods": {}
+                "wins": [], "losses": [],
+                "win_methods": {}, "loss_methods": {},
+                "win_dates": {}, "loss_dates": {},
             })
+
+        # Field-relative average match count for SOS confidence weighting.
+        field_match_counts = [
+            len(h2h_history[n]["wins"]) + len(h2h_history[n]["losses"])
+            for n in field_names if n in h2h_history
+        ]
+        field_match_avg = (
+            sum(field_match_counts) / len(field_match_counts)
+            if field_match_counts else None
+        )
 
         # Power scores and seeds: only field wrestlers, SOS/quality from full data.
         power_scores = build_power_scores(
-            h2h_history, full_sos, full_top_wins, full_bad_losses
+            h2h_history, full_sos, full_top_wins, full_bad_losses,
+            field_match_avg=field_match_avg,
         )
         seeds = compute_rankings(power_scores)
 
@@ -1005,26 +1184,35 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
             confidence, power_scores
         )
 
+        # Circular H2H detection and resolution.
+        circular_h2h = detect_circular_h2h(h2h_history, field_names, full_sos, power_scores)
+
+        # Matches vs top half of field (uses full season history).
+        matches_vs_top_half = build_field_top_half_matches(full_history, seeds, field_names)
+
         def fs(d):
             return {k: v for k, v in d.items() if k in field_names}
 
         results_out[str(weight)] = {
-            "seeds":             [(i + 1, w[0]) for i, w in enumerate(seeds)],
-            "history":           fs(full_history),
-            "sos":               fs(full_sos),
-            "common":            common_out,
-            "confidence":        confidence,
-            "top_wins":          fs(full_top_wins),
-            "bad_losses":        fs(full_bad_losses),
-            "power_scores":      {k: round(v, 1) for k, v in power_scores.items()},
-            "win_methods":       fs(win_methods),
-            "controversy_flags": controversy_flags,
-            "upset_alerts":      upset_alerts,
-            "debate_queue":      debate_queue,
-            "source":            source,
-            "profiles_scraped":  len(profiles),
-            "matches_processed": len(h2h_matches),
-            "errors":            errors,
+            "seeds":                 [(i + 1, w[0]) for i, w in enumerate(seeds)],
+            "history":               fs(full_history),
+            "sos":                   fs(full_sos),
+            "common":                common_out,
+            "confidence":            confidence,
+            "top_wins":              fs(full_top_wins),
+            "bad_losses":            fs(full_bad_losses),
+            "power_scores":          {k: round(v, 1) for k, v in power_scores.items()},
+            "win_methods":           fs(win_methods),
+            "controversy_flags":     controversy_flags,
+            "upset_alerts":          upset_alerts,
+            "debate_queue":          debate_queue,
+            "circular_h2h":          circular_h2h,
+            "matches_vs_top_half":   matches_vs_top_half,
+            "field_match_avg":       round(field_match_avg, 1) if field_match_avg else None,
+            "source":                source,
+            "profiles_scraped":      len(profiles),
+            "matches_processed":     len(h2h_matches),
+            "errors":                errors,
         }
 
     return results_out
