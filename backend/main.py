@@ -608,6 +608,7 @@ def get_votes(weight: str):
 # —————————
 
 import httpx
+import os
 from datetime import datetime, timedelta
 import re
 import asyncio
@@ -615,6 +616,7 @@ import json
 
 FLO_BASE = "https://flowrestling.org"
 FLO_GRAPHQL = "https://www.flowrestling.org/api/graphql"
+FLO_SEARCH_URL = "https://prod-web-api.flowrestling.org/api/search"
 
 WRESTLER_RESULTS_QUERY = """
 query GetAthleteResults($personId: String!) {
@@ -1033,7 +1035,7 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
 
 # —————————
 
-USAB_API_BASE = "https://api.usabracket.com"
+USAB_API_BASE = "https://www.usabracketing.com"
 USAB_HEADERS = {
     "accept": "application/json",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
@@ -1121,35 +1123,41 @@ def merge_season_matches(flo_matches, usab_matches):
 
 async def search_flo_athlete(name, weight=None):
     """
-    Search FloWrestling for a wrestler by name (and optionally weight class).
-    Returns a list of {source, id, name, weight} dicts.
+    Search FloWrestling for a wrestler by name.
+    POST /api/search with {"query": name, "entityType": "person"}.
+    Response: data[].items[] with ofpId, title ("Lastname, Firstname"), metadata2 (location).
+    Returns up to 5 matches as {source, id, name, location, weight} dicts.
     """
-    params = {"name": name}
-    if weight:
-        params["weight"] = str(weight)
+    headers = dict(FLO_API_HEADERS)
+    headers["content-type"] = "application/json"
+    payload = {"query": name, "entityType": "person"}
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(
-                f"{FLO_API_BASE}/athletes",
-                params=params,
-                headers=FLO_API_HEADERS,
-            )
+            resp = await client.post(FLO_SEARCH_URL, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
-        raw = data.get("data") or []
-        if isinstance(raw, dict):
-            raw = [raw]
+
         results = []
-        for a in raw:
-            results.append({
-                "source": "flo",
-                "id":     a.get("coreId") or a.get("id"),
-                "name": (
-                    a.get("name") or
-                    (a.get("firstName", "") + " " + a.get("lastName", "")).strip()
-                ),
-                "weight": str(weight or ""),
-            })
+        for section in (data.get("data") or []):
+            for item in (section.get("items") or []):
+                ofp_id = item.get("ofpId")
+                if not ofp_id:
+                    continue
+                title = item.get("title") or ""
+                # title is "Lastname, Firstname" — convert to "Firstname Lastname"
+                parts = [p.strip() for p in title.split(",", 1)]
+                display_name = f"{parts[1]} {parts[0]}" if len(parts) == 2 else title
+                results.append({
+                    "source":   "flo",
+                    "id":       str(ofp_id),
+                    "name":     display_name,
+                    "location": item.get("metadata2") or "",
+                    "weight":   str(weight or ""),
+                })
+                if len(results) >= 5:
+                    break
+            if len(results) >= 5:
+                break
         return results
     except Exception as e:
         return [{"source": "flo", "error": str(e)}]
@@ -1158,16 +1166,29 @@ async def search_flo_athlete(name, weight=None):
 async def search_usab_athlete(name, weight=None, client=None):
     """
     Search USA Bracketing for a wrestler by name and weight class.
+    Logs in first using USB_USERNAME / USB_PASSWORD environment variables.
     Pass an existing httpx.AsyncClient as `client` for connection reuse.
-    Returns a list of {source, id, name, weight} dicts.
+    Returns up to 5 matches as {source, id, name, weight} dicts.
     """
-    params = {"name": name}
-    if weight:
-        params["weightClass"] = str(weight)
+    username = os.environ.get("USB_USERNAME", "")
+    password = os.environ.get("USB_PASSWORD", "")
     own_client = client is None
     try:
         if own_client:
             client = httpx.AsyncClient(timeout=15, follow_redirects=True)
+
+        # Authenticate when credentials are configured
+        if username and password:
+            await client.post(
+                f"{USAB_API_BASE}/api/users/login",
+                json={"username": username, "password": password},
+                headers=USAB_HEADERS,
+            )
+            # Proceed regardless of login status — cookies captured automatically
+
+        params = {"name": name}
+        if weight:
+            params["weightClass"] = str(weight)
         resp = await client.get(
             f"{USAB_API_BASE}/athletes/search",
             params=params,
@@ -1187,6 +1208,8 @@ async def search_usab_athlete(name, weight=None, client=None):
                 ),
                 "weight": str(a.get("weightClass") or weight or ""),
             })
+            if len(results) >= 5:
+                break
         return results
     except Exception as e:
         return [{"source": "usab", "error": str(e)}]
