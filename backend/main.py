@@ -1124,13 +1124,14 @@ def merge_season_matches(flo_matches, usab_matches):
 async def search_flo_athlete(name, weight=None):
     """
     Search FloWrestling for a wrestler by name.
-    POST /api/search with {"query": name, "entityType": "person"}.
+    POST /api/search with HAR-verified body format.
     Response: data[].items[] with ofpId, title ("Lastname, Firstname"), metadata2 (location).
     Returns up to 5 matches as {source, id, name, location, weight} dicts.
+    Weight is only used as a label — not a search filter.
     """
     headers = dict(FLO_API_HEADERS)
     headers["content-type"] = "application/json"
-    payload = {"query": name, "entityType": "person"}
+    payload = {"query": name, "context": "search", "site_id": 2, "entityTypes": ["person"]}
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             resp = await client.post(FLO_SEARCH_URL, json=payload, headers=headers)
@@ -1165,10 +1166,11 @@ async def search_flo_athlete(name, weight=None):
 
 async def search_usab_athlete(name, weight=None, client=None):
     """
-    Search USA Bracketing for a wrestler by name and weight class.
-    Logs in first using USB_USERNAME / USB_PASSWORD environment variables.
-    Pass an existing httpx.AsyncClient as `client` for connection reuse.
+    Search USA Bracketing for a wrestler by name.
+    Logs in via web form: GET login page for _token, POST form data with credentials.
+    Search URL: /athletes?name=...
     Returns up to 5 matches as {source, id, name, weight} dicts.
+    Weight is only used as a label — not a search filter.
     """
     username = os.environ.get("USB_USERNAME", "")
     password = os.environ.get("USB_PASSWORD", "")
@@ -1179,18 +1181,25 @@ async def search_usab_athlete(name, weight=None, client=None):
 
         # Authenticate when credentials are configured
         if username and password:
-            await client.post(
-                f"{USAB_API_BASE}/api/users/login",
-                json={"username": username, "password": password},
+            # Fetch login page to get CSRF token
+            login_page = await client.get(
+                f"{USAB_API_BASE}/login",
                 headers=USAB_HEADERS,
             )
-            # Proceed regardless of login status — cookies captured automatically
+            # Extract _token from hidden input
+            token_match = re.search(r'name="_token"\s+value="([^"]+)"', login_page.text)
+            csrf_token = token_match.group(1) if token_match else ""
+            # POST form-encoded login
+            await client.post(
+                f"{USAB_API_BASE}/login",
+                data={"_token": csrf_token, "username": username, "password": password},
+                headers=dict(USAB_HEADERS, **{"content-type": "application/x-www-form-urlencoded"}),
+            )
+            # Session cookie captured automatically by httpx
 
         params = {"name": name}
-        if weight:
-            params["weightClass"] = str(weight)
         resp = await client.get(
-            f"{USAB_API_BASE}/athletes/search",
+            f"{USAB_API_BASE}/athletes",
             params=params,
             headers=USAB_HEADERS,
         )
