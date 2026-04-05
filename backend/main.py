@@ -730,11 +730,12 @@ async def fetch_flo_profile(wrestler_id, season=None):
             )
             athlete_resp.raise_for_status()
             athlete_data = athlete_resp.json()
+            profile_data = athlete_data.get("data") or athlete_data
             wrestler_name = (
-                athlete_data.get("name") or
+                profile_data.get("name") or
                 " ".join(filter(None, [
-                    athlete_data.get("firstName"),
-                    athlete_data.get("lastName"),
+                    profile_data.get("firstName"),
+                    profile_data.get("lastName"),
                 ])).strip() or
                 wrestler_id
             )
