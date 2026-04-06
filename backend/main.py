@@ -1226,9 +1226,135 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
 
 USAB_API_BASE = "https://www.usabracketing.com"
 USAB_HEADERS = {
-    "accept": "application/json",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 }
+
+
+async def _usab_login(client):
+    """
+    Log in to USA Bracketing using the shared httpx client (preserves cookies).
+    Returns True if login succeeded (redirected away from /login).
+    """
+    login_field = os.environ.get("USB_USERNAME", "")
+    password    = os.environ.get("USB_PASSWORD", "")
+    if not login_field or not password:
+        print("=== USAB _usab_login: no credentials configured ===")
+        return False
+
+    login_page = await client.get(f"{USAB_API_BASE}/login", headers=USAB_HEADERS)
+    html = login_page.text
+    token_match = (
+        re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', html) or
+        re.search(r'<input[^>]+value="([^"]+)"[^>]+name="_token"', html) or
+        re.search(r'<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"', html)
+    )
+    csrf_token = token_match.group(1) if token_match else ""
+    print(f"=== USAB _usab_login: login_page_status={login_page.status_code} csrf_token={csrf_token!r} ===")
+
+    login_resp = await client.post(
+        f"{USAB_API_BASE}/login",
+        data={
+            "_token":   csrf_token,
+            "login":    login_field,
+            "password": password,
+            "remember": "on",
+        },
+        headers=dict(USAB_HEADERS, **{"content-type": "application/x-www-form-urlencoded"}),
+    )
+    landed    = str(login_resp.url)
+    logged_in = "/login" not in landed
+    cookies   = list(client.cookies.keys())
+    print(f"=== USAB _usab_login: status={login_resp.status_code} landed={landed!r} logged_in={logged_in} cookies={cookies} ===")
+    if not logged_in:
+        print(f"=== USAB _usab_login: LOGIN FAILED — body (first 300):\n{login_resp.text[:300]} ===")
+    return logged_in
+
+
+def _parse_usab_matches_html(html, event_name, season_start, season_end):
+    """
+    Parse bout rows from a USAB HTML fragment (profile page or Livewire response).
+    Looks for table rows / list items / div cards that contain an opponent athlete link.
+    Returns a list of match dicts compatible with merge_season_matches.
+    """
+    soup    = BeautifulSoup(html, "html.parser")
+    matches = []
+    win_type_re = re.compile(
+        r'\b(dec(?:ision)?|tf|tech(?:nical)?[\s_-]*fall|md|major[\s_-]*dec(?:ision)?'
+        r'|fall|pin|forfeit|for\.?|inj\.?\s*def(?:ault)?)\b',
+        re.IGNORECASE,
+    )
+
+    for row in soup.find_all(["tr", "li", "div"],
+                             class_=re.compile(r'bout|match|result|row|card', re.IGNORECASE)):
+        # Must contain a link to another athlete profile
+        opp = ""
+        for a in row.find_all("a", href=True):
+            if "/athletes/" in a["href"]:
+                t = a.get_text(strip=True)
+                if t and t.lower() not in ("view", "profile", "details"):
+                    opp = t
+                    break
+        if not opp:
+            continue
+
+        row_text = row.get_text(" ", strip=True)
+
+        # Win/loss: look for a standalone W or L cell/span
+        won = None
+        for el in row.find_all(["td", "span", "div", "strong"]):
+            t = el.get_text(strip=True).upper()
+            if t in ("W", "WIN", "WON"):
+                won = True
+                break
+            if t in ("L", "LOSS", "LOST"):
+                won = False
+                break
+
+        # Win method
+        wt = win_type_re.search(row_text)
+        if wt:
+            raw = wt.group(1).lower().replace(" ", "").replace("-", "").replace("_", "")
+            if "fall" in raw or "pin" in raw:
+                method = "fall"
+            elif "tf" in raw or "tech" in raw:
+                method = "tf"
+            elif "md" in raw or "major" in raw:
+                method = "md"
+            else:
+                method = "dec"
+        else:
+            method = "dec"
+
+        # Date: look for ISO-like strings
+        date_str  = None
+        match_date = None
+        dm = re.search(r'\b(\d{4}-\d{2}-\d{2}|\w+ \d{1,2},?\s+\d{4})\b', row_text)
+        if dm:
+            date_str = dm.group(1)
+            for fmt in ("%Y-%m-%d", "%B %d, %Y", "%B %d %Y", "%b %d, %Y", "%b %d %Y"):
+                try:
+                    match_date = datetime.strptime(date_str[:len(fmt)], fmt)
+                    break
+                except Exception:
+                    pass
+
+        in_season = True
+        if match_date:
+            in_season = season_start <= match_date <= season_end
+        if not in_season:
+            continue
+
+        matches.append({
+            "opponent":   opp,
+            "method":     method,
+            "won":        bool(won),
+            "tournament": str(event_name or "USA Bracketing"),
+            "date":       match_date.strftime("%b %d, %Y") if match_date else None,
+            "score":      None,
+        })
+
+    return matches
 
 
 def _norm_name(s):
@@ -1368,85 +1494,27 @@ async def search_flo_athlete(name, weight=None):
 async def search_usab_athlete(name, weight=None, client=None):
     """
     Search USA Bracketing for a wrestler by name.
-    Login flow:
-      1. GET /login — extract _token from hidden input name="_token"
-         (also available as <meta name="csrf-token" content="...">)
-      2. POST /login with form fields: _token, login (NOT username), password, remember
-      3. Successful login redirects to dashboard (URL no longer contains /login)
-    Search: GET /athletes?search=NAME — parse HTML for UUID profile links.
-    Weight is only used as a label — not a search filter.
+    Results are JS-rendered so this is rarely useful; search is skipped in /search/athlete.
+    Kept for any internal callers that still need it.
     """
-    login_field = os.environ.get("USB_USERNAME", "")
-    password    = os.environ.get("USB_PASSWORD", "")
-    own_client  = client is None
+    own_client = client is None
     try:
         if own_client:
             client = httpx.AsyncClient(timeout=15, follow_redirects=True)
 
-        # Authenticate when credentials are configured
-        if login_field and password:
-            # Step 1: GET login page and extract CSRF token
-            login_page = await client.get(
-                f"{USAB_API_BASE}/login",
-                headers=USAB_HEADERS,
-            )
-            html = login_page.text
-            # Prefer hidden input name="_token"; fall back to meta name="csrf-token"
-            token_match = (
-                re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', html) or
-                re.search(r'<input[^>]+value="([^"]+)"[^>]+name="_token"', html) or
-                re.search(r'<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"', html)
-            )
-            csrf_token = token_match.group(1) if token_match else ""
-            print(f"=== USAB login_page status={login_page.status_code} csrf_token={csrf_token!r} ===")
+        await _usab_login(client)
 
-            # Step 2: POST login with correct field names
-            login_resp = await client.post(
-                f"{USAB_API_BASE}/login",
-                data={
-                    "_token":  csrf_token,
-                    "login":   login_field,   # field name is "login", not "username"
-                    "password": password,
-                    "remember": "on",
-                },
-                headers=dict(USAB_HEADERS, **{"content-type": "application/x-www-form-urlencoded"}),
-            )
-            # Step 3: Check redirect landed on dashboard (not back on /login)
-            landed = str(login_resp.url)
-            logged_in = "/login" not in landed
-            cookies_after = {k: v for k, v in client.cookies.items()}
-            print(f"=== USAB login POST status={login_resp.status_code} landed={landed!r} logged_in={logged_in} ===")
-            print(f"=== USAB cookies after login: {list(cookies_after.keys())} ===")
-            if not logged_in:
-                print(f"=== USAB LOGIN FAILED — still on login page. Response body (first 500):\n{login_resp.text[:500]} ===")
-            else:
-                print(f"=== USAB LOGIN SUCCEEDED ===")
-        else:
-            print(f"=== USAB skipping login: login_field={bool(login_field)} password={bool(password)} ===")
-
-        # Split name into first/last for the search query
         parts      = name.strip().split(None, 1)
         first_name = parts[0] if parts else name
         last_name  = parts[1] if len(parts) > 1 else ""
-        search_url = f"{USAB_API_BASE}/athletes"
-        search_params = {"first_name": first_name, "last_name": last_name}
-        print(f"=== USAB search URL={search_url} params={search_params} ===")
         search_resp = await client.get(
-            search_url,
-            params=search_params,
+            f"{USAB_API_BASE}/athletes",
+            params={"first_name": first_name, "last_name": last_name},
             headers=USAB_HEADERS,
         )
         print(f"=== USAB search status={search_resp.status_code} final_url={search_resp.url} ===")
-        print(f"=== USAB search response (first 1000):\n{search_resp.text[:1000]} ===")
 
-        # Parse HTML for athlete profile links using BeautifulSoup
-        html = search_resp.text
-        soup = BeautifulSoup(html, "html.parser")
-
-        # Debug: print all hrefs containing "/athletes/"
-        all_athlete_hrefs = [a["href"] for a in soup.find_all("a", href=True) if "/athletes/" in a["href"]]
-        print(f"=== USAB all /athletes/ hrefs ({len(all_athlete_hrefs)}): {all_athlete_hrefs[:20]} ===")
-
+        soup    = BeautifulSoup(search_resp.text, "html.parser")
         uuid_re = re.compile(r'/athletes/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', re.IGNORECASE)
         seen    = set()
         results = []
@@ -1458,20 +1526,14 @@ async def search_usab_athlete(name, weight=None, client=None):
             if uid in seen:
                 continue
             seen.add(uid)
-
-            # Athlete name: text of the link itself, or nearest heading/strong in parent card
             raw_name = a.get_text(" ", strip=True)
             if not raw_name or raw_name.lower() in ("view", "profile", "details", "more"):
-                # Walk up to card container and grab first non-empty heading or strong
                 card = a.find_parent(["div", "article", "li", "tr"])
                 if card:
                     heading = card.find(["h1", "h2", "h3", "h4", "strong", "b"])
                     raw_name = heading.get_text(" ", strip=True) if heading else ""
-
             if not raw_name:
                 continue
-
-            # State badge: look for a span/div with a 2-letter uppercase text near the card
             location = ""
             card = a.find_parent(["div", "article", "li", "tr"])
             if card:
@@ -1480,18 +1542,10 @@ async def search_usab_athlete(name, weight=None, client=None):
                     if re.fullmatch(r'[A-Z]{2}', txt):
                         location = txt
                         break
-
-            results.append({
-                "source":   "usab",
-                "id":       uid,
-                "name":     raw_name,
-                "location": location,
-                "weight":   str(weight or ""),
-            })
+            results.append({"source": "usab", "id": uid, "name": raw_name,
+                             "location": location, "weight": str(weight or "")})
             if len(results) >= 5:
                 break
-
-        print(f"=== USAB parsed {len(results)} results: {[r['name'] for r in results]} ===")
         return results
     except Exception as e:
         return [{"source": "usab", "error": str(e)}]
@@ -1502,77 +1556,128 @@ async def search_usab_athlete(name, weight=None, client=None):
 
 async def fetch_usab_profile(wrestler_id, season=None):
     """
-    Fetch match results from USA Bracketing for a wrestler by ID.
+    Fetch match results from USA Bracketing for a wrestler by UUID.
+    Flow:
+      1. Login via _usab_login
+      2. GET /athletes/UUID — parse wrestler name and Livewire component snapshot
+      3. For each event UUID in the snapshot, POST /livewire/update?showResults
+      4. Parse HTML fragments from Livewire for bout rows (opponent link + W/L + method)
+      5. Fall back to parsing the profile page HTML directly if no Livewire component found
     Returns the same shape as fetch_flo_profile.
     """
+    print(f"=== USAB fetch_usab_profile: wrestler_id={wrestler_id!r} season={season!r} ===")
     season_start, season_end = get_season_range(season)
-    matches = []
+    matches       = []
     wrestler_name = None
-    weight_class = None
+    weight_class  = None
 
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            resp = await client.get(
-                f"{USAB_API_BASE}/athletes/{wrestler_id}/results",
-                headers=USAB_HEADERS,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            logged_in = await _usab_login(client)
+            print(f"=== USAB fetch_usab_profile: logged_in={logged_in} ===")
 
-        profile_root = data.get("data") or data
-        if isinstance(profile_root, dict):
-            wrestler_name = (
-                profile_root.get("name") or
-                " ".join(filter(None, [
-                    profile_root.get("firstName"),
-                    profile_root.get("lastName"),
-                ])).strip() or
-                str(wrestler_id)
+            # Step 1: fetch the athlete profile page
+            profile_url = f"{USAB_API_BASE}/athletes/{wrestler_id}"
+            print(f"=== USAB fetch_usab_profile: GET {profile_url} ===")
+            profile_resp = await client.get(profile_url, headers=USAB_HEADERS)
+            print(f"=== USAB fetch_usab_profile: profile status={profile_resp.status_code} final_url={profile_resp.url} ===")
+            print(f"=== USAB fetch_usab_profile: profile HTML (first 3000):\n{profile_resp.text[:3000]} ===")
+
+            soup = BeautifulSoup(profile_resp.text, "html.parser")
+
+            # Extract wrestler name from the page heading
+            for sel in ["h1", "h2", ".athlete-name", ".profile-name", "[class*='name']"]:
+                el = soup.select_one(sel)
+                if el:
+                    t = el.get_text(strip=True)
+                    if t and len(t) > 2:
+                        wrestler_name = t
+                        break
+            print(f"=== USAB fetch_usab_profile: wrestler_name={wrestler_name!r} ===")
+
+            # Step 2: find Livewire component (v3 uses wire:snapshot, v2 uses wire:initial-data)
+            lw_el = (
+                soup.find(attrs={"wire:snapshot": True}) or
+                soup.find(attrs={"wire:initial-data": True})
             )
 
-        for event in (data.get("results") or data.get("events") or []):
-            event_name = event.get("name") or event.get("eventName") or "USA Bracketing"
-            for bout in (event.get("bouts") or event.get("boutResults") or []):
-                opp = (
-                    (bout.get("opponent") or {}).get("name") or
-                    bout.get("opponentName") or ""
+            if lw_el:
+                snapshot_str = lw_el.get("wire:snapshot") or lw_el.get("wire:initial-data") or ""
+                wire_id      = lw_el.get("wire:id", "")
+                print(f"=== USAB fetch_usab_profile: Livewire wire:id={wire_id!r} snapshot (first 500)={snapshot_str[:500]!r} ===")
+
+                # Collect all UUIDs embedded in the snapshot (these are event IDs)
+                all_uuids  = re.findall(
+                    r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+                    snapshot_str, re.IGNORECASE,
                 )
-                if not opp:
-                    continue
+                event_uuids = list(dict.fromkeys(
+                    u for u in all_uuids if u.lower() != str(wrestler_id).lower()
+                ))
+                print(f"=== USAB fetch_usab_profile: event UUIDs in snapshot: {event_uuids} ===")
 
-                won      = bool((bout.get("athlete") or {}).get("isWinner") or bout.get("isWinner"))
-                win_type = str(bout.get("winType") or bout.get("decisionType") or "").upper()
-                method   = WIN_TYPE_MAP.get(win_type, "dec")
+                # Get CSRF token for Livewire AJAX requests
+                meta_csrf  = soup.find("meta", attrs={"name": "csrf-token"})
+                csrf_token = meta_csrf["content"] if meta_csrf else ""
 
-                wc = str(bout.get("weight") or event.get("weightClass") or "")
-                if wc and not weight_class:
-                    weight_class = parse_weight_from_text(wc)
-
-                date_str = bout.get("date") or event.get("startDate") or ""
-                match_date = None
-                if date_str:
+                # Step 3: call showResults for each event via Livewire
+                for event_uuid in event_uuids[:15]:
                     try:
-                        match_date = datetime.fromisoformat(
-                            date_str.rstrip("Z").split("T")[0]
+                        lw_resp = await client.post(
+                            f"{USAB_API_BASE}/livewire/update",
+                            json={
+                                "components": [{
+                                    "snapshot": snapshot_str,
+                                    "updates":  {},
+                                    "calls":    [{"path": "", "method": "showResults", "params": [event_uuid]}],
+                                }]
+                            },
+                            headers=dict(USAB_HEADERS, **{
+                                "accept":       "text/html, application/xhtml+xml",
+                                "content-type": "application/json",
+                                "x-csrf-token": csrf_token,
+                                "x-livewire":   "true",
+                                "referer":      profile_url,
+                            }),
                         )
-                    except Exception:
-                        pass
+                        print(f"=== USAB Livewire showResults event={event_uuid} status={lw_resp.status_code} ===")
+                        lw_text = lw_resp.text
+                        print(f"=== USAB Livewire response (first 1000):\n{lw_text[:1000]} ===")
 
-                in_season = True
-                if match_date:
-                    in_season = season_start <= match_date <= season_end
+                        # Livewire v3 returns JSON with {"components": [{"effects": {"html": "..."}}]}
+                        # Livewire v2 returns JSON with {"effects": {"html": "..."}}
+                        try:
+                            lw_json  = lw_resp.json()
+                            comps    = lw_json.get("components") or []
+                            html_frag = ""
+                            if comps:
+                                html_frag = (comps[0].get("effects") or {}).get("html") or ""
+                            if not html_frag:
+                                html_frag = (lw_json.get("effects") or {}).get("html") or lw_text
+                        except Exception:
+                            html_frag = lw_text
 
-                if in_season:
-                    matches.append({
-                        "opponent":   opp,
-                        "method":     method,
-                        "won":        won,
-                        "tournament": event_name,
-                        "date":       match_date.strftime("%b %d, %Y") if match_date else None,
-                        "score":      None,
-                    })
+                        event_matches = _parse_usab_matches_html(
+                            html_frag, event_uuid, season_start, season_end
+                        )
+                        print(f"=== USAB Livewire event={event_uuid} parsed {len(event_matches)} matches ===")
+                        matches.extend(event_matches)
+                    except Exception as lw_err:
+                        print(f"=== USAB Livewire error for event {event_uuid}: {lw_err} ===")
+            else:
+                # No Livewire — try parsing match rows directly from the profile page
+                print(f"=== USAB fetch_usab_profile: no Livewire component, parsing profile HTML directly ===")
+                page_matches = _parse_usab_matches_html(
+                    profile_resp.text, "USA Bracketing", season_start, season_end
+                )
+                print(f"=== USAB fetch_usab_profile: direct parse found {len(page_matches)} matches ===")
+                matches.extend(page_matches)
+
+            print(f"=== USAB fetch_usab_profile: TOTAL matches={len(matches)} ===")
 
     except Exception as e:
+        import traceback
+        print(f"=== USAB fetch_usab_profile ERROR: {e}\n{traceback.format_exc()} ===")
         return {
             "wrestler_id":   str(wrestler_id),
             "wrestler_name": wrestler_name,
@@ -1642,47 +1747,32 @@ async def scrape_combined(request: Request):
         errors   = []
 
         for entry in wrestler_entries:
-            name   = (entry.get("name") or "").strip()
-            weight = entry.get("weight") or weight_override
+            name    = (entry.get("name") or "").strip()
+            weight  = entry.get("weight") or weight_override
+            flo_id  = entry.get("flo_id") or None
+            usab_id = entry.get("usab_id") or None
             if not name:
                 errors.append("Skipped entry with no name")
                 continue
 
-            # Search both platforms in parallel
-            flo_hits, usab_hits = await asyncio.gather(
-                search_flo_athlete(name, weight),
-                search_usab_athlete(name, weight),
-                return_exceptions=True,
-            )
-            if isinstance(flo_hits, Exception):
-                flo_hits = []
-            if isinstance(usab_hits, Exception):
-                usab_hits = []
+            print(f"=== scrape_combined: processing {name!r} flo_id={flo_id!r} usab_id={usab_id!r} ===")
 
-            # Pick best match: first hit whose name loosely matches the query
-            norm_query = _norm_name(name)
-
-            flo_id = None
-            for hit in (flo_hits or []):
-                if hit.get("id") and _norm_name(hit.get("name", "")) and (
-                    norm_query in _norm_name(hit.get("name", "")) or
-                    _norm_name(hit.get("name", "")) in norm_query
-                ):
-                    flo_id = hit["id"]
-                    break
-            if not flo_id and flo_hits and flo_hits[0].get("id"):
-                flo_id = flo_hits[0]["id"]
-
-            usab_id = None
-            for hit in (usab_hits or []):
-                if hit.get("id") and _norm_name(hit.get("name", "")) and (
-                    norm_query in _norm_name(hit.get("name", "")) or
-                    _norm_name(hit.get("name", "")) in norm_query
-                ):
-                    usab_id = hit["id"]
-                    break
-            if not usab_id and usab_hits and usab_hits[0].get("id"):
-                usab_id = usab_hits[0]["id"]
+            # Search Flo if no flo_id supplied
+            if not flo_id:
+                flo_hits = await search_flo_athlete(name, weight)
+                if isinstance(flo_hits, Exception):
+                    flo_hits = []
+                norm_query = _norm_name(name)
+                for hit in (flo_hits or []):
+                    if hit.get("id") and _norm_name(hit.get("name", "")) and (
+                        norm_query in _norm_name(hit.get("name", "")) or
+                        _norm_name(hit.get("name", "")) in norm_query
+                    ):
+                        flo_id = hit["id"]
+                        break
+                if not flo_id and flo_hits and flo_hits[0].get("id"):
+                    flo_id = flo_hits[0]["id"]
+                print(f"=== scrape_combined: {name!r} flo search -> flo_id={flo_id!r} ===")
 
             # Fetch full season profiles in parallel
             flo_profile, usab_profile = await asyncio.gather(
@@ -1698,6 +1788,18 @@ async def scrape_combined(request: Request):
             flo_matches  = (flo_profile  or {}).get("matches", [])
             usab_matches = (usab_profile or {}).get("matches", [])
             merged       = merge_season_matches(flo_matches, usab_matches)
+            print(f"=== scrape_combined: {name!r} flo={len(flo_matches)} usab={len(usab_matches)} merged={len(merged)} ===")
+            # Dedup merged by (tournament, opponent) as a safety net
+            seen_keys = set()
+            deduped   = []
+            for m in merged:
+                key = (_norm_tournament(m.get("tournament", "")), _norm_name(m.get("opponent", "")))
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    deduped.append(m)
+            if len(deduped) < len(merged):
+                print(f"=== scrape_combined: {name!r} dedup removed {len(merged) - len(deduped)} duplicates ===")
+            merged = deduped
 
             wrestler_name = (
                 (flo_profile  or {}).get("wrestler_name") or

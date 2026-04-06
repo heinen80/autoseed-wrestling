@@ -2629,7 +2629,9 @@ async function importCombined() {
 
   try {
     const body = {
-      wrestlers: siWrestlers.map(function(w) { return { name: w.name, weight: w.weight || weight }; }),
+      wrestlers: siWrestlers.map(function(w) {
+        return { name: w.name, weight: w.weight || weight, flo_id: w.flo_id || null, usab_id: w.usab_id || null };
+      }),
       season:    season,
     };
     if (weight) body.weight = weight;
