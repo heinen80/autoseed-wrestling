@@ -1328,13 +1328,28 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
     )
     over_re = re.compile(r'\bover\b', re.IGNORECASE)
 
-    # Normalised wrestler name for W/L detection ("lastname, firstname" or plain)
+    # Pre-compute name tokens for W/L detection
+    # USAB may format as "Lastname, Firstname" or "Firstname Lastname" or abbreviate
     wrestler_norm = wrestler_name.lower().strip() if wrestler_name else ""
+    if wrestler_norm:
+        if "," in wrestler_norm:
+            # "Heinen, Luke" → last="heinen", first="luke"
+            parts = [p.strip() for p in wrestler_norm.split(",", 1)]
+            wname_last  = parts[0]
+            wname_first = parts[1].split()[0] if parts[1] else ""
+        else:
+            # "Luke Heinen" → last="heinen", first="luke"
+            tokens = wrestler_norm.split()
+            wname_last  = tokens[-1] if tokens else ""
+            wname_first = tokens[0]  if len(tokens) > 1 else ""
+    else:
+        wname_last = wname_first = ""
 
     matches      = []
     seen_opps    = set()
     season_pass  = 0
     season_fail  = 0
+    bout_log_count = 0  # log first 10 bouts per event regardless of debug flag
 
     # Find every link to a different athlete profile — each is one bout
     for a_tag in soup.find_all("a", href=True):
@@ -1386,28 +1401,52 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
         else:
             method = "dec"
 
-        # ── Win/loss: split on " over " ──────────────────────────────────────
+        # ── Win/loss: split on the LAST " over " in the bout text ───────────
         # Format: "Winner , Team over Loser , Team ( Method Score )"
-        # If wrestler_name appears before "over" → win; after "over" → loss.
-        won = None
-        over_m = over_re.search(result_text)
-        if over_m and wrestler_norm:
-            before = result_text[:over_m.start()].lower()
-            after  = result_text[over_m.end():].lower()
-            # Use last name as the most reliable token (handles "Heinen, Luke" order)
-            last_name = wrestler_norm.split(",")[0].strip() if "," in wrestler_norm else wrestler_norm.split()[-1]
-            if last_name in before:
+        # Splitting on the last "over" avoids false splits from team names.
+        won        = None
+        wl_method  = "none"
+        over_spans = [(m.start(), m.end()) for m in over_re.finditer(result_text)]
+        if over_spans and wname_last:
+            last_start, last_end = over_spans[-1]
+            before = result_text[:last_start].lower()
+            after  = result_text[last_end:].lower()
+
+            # Check 1: both first and last name in before-half → definite win
+            if wname_last in before and (not wname_first or wname_first in before):
                 won = True
-            elif last_name in after:
+                wl_method = "both-names-before"
+            # Check 2: both in after-half → definite loss
+            elif wname_last in after and (not wname_first or wname_first in after):
                 won = False
-            if debug:
-                print(f"=== USAB W/L: wrestler={wrestler_norm!r} last={last_name!r} "
-                      f"before={before[:60]!r} after={after[:60]!r} won={won} ===")
+                wl_method = "both-names-after"
+            # Check 3: last name alone before → win (abbreviated first name)
+            elif wname_last in before:
+                won = True
+                wl_method = "last-name-before"
+            # Check 4: last name alone after → loss
+            elif wname_last in after:
+                won = False
+                wl_method = "last-name-after"
+
         if won is None:
-            # Fallback: look for standalone W/L token
+            # Fallback: standalone W/L token anywhere in the container
             wl_m = re.search(r'\b(W(?:in|on)?|L(?:oss|ost)?)\b', result_text)
             if wl_m:
                 won = wl_m.group(1).upper().startswith("W")
+                wl_method = "wl-token"
+
+        # Per-bout logging: always print first 10 bouts per event
+        if bout_log_count < 10:
+            bout_log_count += 1
+            over_preview = ""
+            if over_spans and wname_last:
+                s, e = over_spans[-1]
+                over_preview = (f" | before={result_text[:s][:50]!r}"
+                                f" | after={result_text[e:][:50]!r}")
+            print(f"=== USAB bout[{bout_log_count}]: opp={opp!r} "
+                  f"result={result_text[:80]!r} "
+                  f"wl_method={wl_method!r} won={won}{over_preview} ===")
 
         # ── Date + season filter ──────────────────────────────────────────────
         match_date = None
