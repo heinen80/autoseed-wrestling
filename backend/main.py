@@ -1325,13 +1325,11 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
             pass
     print(f"=== USAB _parse_usab_matches_html: event={event_name!r} event_date={event_date} ===")
 
-    # ── Build a list of plain-text lines for bout-line searching ──────────────
-    # Splitting on newlines gives one logical row per line (matches "Name over Name (Method)").
-    all_lines = [ln.strip() for ln in soup.get_text("\n", strip=True).split("\n") if ln.strip()]
     if debug:
-        print(f"=== USAB all_lines (first 30):\n" + "\n".join(all_lines[:30]) + " ===")
+        all_text = soup.get_text(" | ", strip=True)
+        print(f"=== USAB _parse_usab_matches_html DEBUG all_text:\n{all_text[:3000]} ===")
         athlete_links = [a["href"] for a in soup.find_all("a", href=True) if "/athletes/" in a["href"]]
-        print(f"=== USAB athlete hrefs: {athlete_links} ===")
+        print(f"=== USAB _parse_usab_matches_html DEBUG athlete hrefs: {athlete_links} ===")
 
     result_re = re.compile(
         r'\b(Dec|TF|MD|Fall|Forfeit|For\.?|Inj\.?\s*Def\.?)\b'
@@ -1341,13 +1339,16 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
     over_re = re.compile(r'\bover\b', re.IGNORECASE)
 
     # Pre-compute name tokens for W/L detection
+    # USAB may format as "Lastname, Firstname" or "Firstname Lastname" or abbreviate
     wrestler_norm = wrestler_name.lower().strip() if wrestler_name else ""
     if wrestler_norm:
         if "," in wrestler_norm:
+            # "Heinen, Luke" → last="heinen", first="luke"
             parts = [p.strip() for p in wrestler_norm.split(",", 1)]
             wname_last  = parts[0]
             wname_first = parts[1].split()[0] if parts[1] else ""
         else:
+            # "Luke Heinen" → last="heinen", first="luke"
             tokens = wrestler_norm.split()
             wname_last  = tokens[-1] if tokens else ""
             wname_first = tokens[0]  if len(tokens) > 1 else ""
@@ -1358,7 +1359,7 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
     seen_opps      = set()
     season_pass    = 0
     season_fail    = 0
-    bout_log_count = 0
+    bout_log_count = 0  # log first 10 bouts per event regardless of debug flag
 
     # Find every link to a different athlete profile — each is one bout
     for a_tag in soup.find_all("a", href=True):
@@ -1372,22 +1373,27 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
             continue
         seen_opps.add(opp_key)
 
-        # ── Find the bout line: scan text lines for one that contains the
-        #    opponent name + "over" + a result token.  This avoids the DOM walk
-        #    landing on "MAT 09 -" or other short containers.
-        opp_lower   = opp.lower()
+        # Walk up the DOM (up to 6 levels) to find a container with a result token.
+        # get_text(" ", ...) joins all child text with spaces, reconstructing the
+        # full bout line even when Tailwind splits names/teams into separate nodes.
+        container   = a_tag.parent
         result_text = ""
-        for line in all_lines:
-            line_lower = line.lower()
-            if opp_lower in line_lower and over_re.search(line) and result_re.search(line):
-                result_text = line
+        for _ in range(6):
+            if container is None:
                 break
-        # Fallback: any line containing the opponent + result token (no "over" required)
+            ct = container.get_text(" ", strip=True)
+            if result_re.search(ct) and len(ct) > len(opp) + 2:
+                result_text = ct
+                break
+            container = container.parent
+
         if not result_text:
-            for line in all_lines:
-                if opp.lower() in line.lower() and result_re.search(line):
-                    result_text = line
-                    break
+            # Fallback: raw-HTML snippet centred on the opponent name occurrence
+            idx = html.find(opp)
+            if idx != -1:
+                snippet = html[max(0, idx - 200): idx + 200]
+                if result_re.search(snippet):
+                    result_text = BeautifulSoup(snippet, "html.parser").get_text(" ", strip=True)
 
         rm = result_re.search(result_text)
         if not rm:
