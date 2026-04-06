@@ -1301,23 +1301,23 @@ async def _usab_login(client):
     return logged_in
 
 
-def _parse_usab_matches_html(html, event_name, season_start, season_end, debug=False):
+def _parse_usab_matches_html(html, event_name, season_start, season_end,
+                             wrestler_name=None, debug=False):
     """
     Parse bout results from a USAB Livewire HTML fragment.
 
-    The site uses Tailwind utility classes (no semantic bout/match/row class names),
-    so we anchor on opponent athlete links (/athletes/UUID) and walk up the DOM
-    to find a container that also contains a result token (Dec/TF/MD/Fall/Forfeit).
+    Bout format: "WINNER , TEAM over LOSER , TEAM ( METHOD SCORE )"
+    Win/loss is determined by splitting on " over " (case-insensitive) and
+    checking whether wrestler_name appears in the first half (win) or second
+    half (loss).  Falls back to W/L token search if "over" is absent.
 
     Returns a list of match dicts compatible with merge_season_matches.
     """
     soup = BeautifulSoup(html, "html.parser")
 
     if debug:
-        # Print all text tokens so we can see the actual content
         all_text = soup.get_text(" | ", strip=True)
         print(f"=== USAB _parse_usab_matches_html DEBUG all_text:\n{all_text[:3000]} ===")
-        # Print all athlete hrefs
         athlete_links = [a["href"] for a in soup.find_all("a", href=True) if "/athletes/" in a["href"]]
         print(f"=== USAB _parse_usab_matches_html DEBUG athlete hrefs: {athlete_links} ===")
 
@@ -1326,9 +1326,15 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end, debug=F
         r'(?:\s+(\d{1,3}[-–]\d{1,3}))?',
         re.IGNORECASE,
     )
+    over_re = re.compile(r'\bover\b', re.IGNORECASE)
 
-    matches = []
-    seen_opps = set()
+    # Normalised wrestler name for W/L detection ("lastname, firstname" or plain)
+    wrestler_norm = wrestler_name.lower().strip() if wrestler_name else ""
+
+    matches      = []
+    seen_opps    = set()
+    season_pass  = 0
+    season_fail  = 0
 
     # Find every link to a different athlete profile — each is one bout
     for a_tag in soup.find_all("a", href=True):
@@ -1342,9 +1348,8 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end, debug=F
             continue
         seen_opps.add(opp_key)
 
-        # Walk up the DOM (up to 6 levels) until we find a node whose text
-        # contains a result token AND is wide enough to be a "row" container.
-        container = a_tag.parent
+        # Walk up the DOM (up to 6 levels) to find a container with a result token
+        container   = a_tag.parent
         result_text = ""
         for _ in range(6):
             if container is None:
@@ -1356,14 +1361,12 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end, debug=F
             container = container.parent
 
         if not result_text:
-            # Widen search: use the full soup text around this opponent mention
             idx = html.find(opp)
             if idx != -1:
                 snippet = html[max(0, idx - 200): idx + 200]
                 if result_re.search(snippet):
                     result_text = BeautifulSoup(snippet, "html.parser").get_text(" ", strip=True)
 
-        # Parse result method + score
         rm = result_re.search(result_text)
         if not rm:
             if debug:
@@ -1374,22 +1377,39 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end, debug=F
         score      = rm.group(2) or None
         if "fall" in raw_method:
             method = "fall"
-        elif raw_method in ("tf",):
+        elif raw_method == "tf":
             method = "tf"
-        elif raw_method in ("md",):
+        elif raw_method == "md":
             method = "md"
         elif raw_method in ("for", "forfeit"):
             method = "dec"
         else:
             method = "dec"
 
-        # Win/loss: look for standalone W / L / Win / Loss tokens in the container
+        # ── Win/loss: split on " over " ──────────────────────────────────────
+        # Format: "Winner , Team over Loser , Team ( Method Score )"
+        # If wrestler_name appears before "over" → win; after "over" → loss.
         won = None
-        wl_m = re.search(r'\b(W(?:in|on)?|L(?:oss|ost)?)\b', result_text)
-        if wl_m:
-            won = wl_m.group(1).upper().startswith("W")
+        over_m = over_re.search(result_text)
+        if over_m and wrestler_norm:
+            before = result_text[:over_m.start()].lower()
+            after  = result_text[over_m.end():].lower()
+            # Use last name as the most reliable token (handles "Heinen, Luke" order)
+            last_name = wrestler_norm.split(",")[0].strip() if "," in wrestler_norm else wrestler_norm.split()[-1]
+            if last_name in before:
+                won = True
+            elif last_name in after:
+                won = False
+            if debug:
+                print(f"=== USAB W/L: wrestler={wrestler_norm!r} last={last_name!r} "
+                      f"before={before[:60]!r} after={after[:60]!r} won={won} ===")
+        if won is None:
+            # Fallback: look for standalone W/L token
+            wl_m = re.search(r'\b(W(?:in|on)?|L(?:oss|ost)?)\b', result_text)
+            if wl_m:
+                won = wl_m.group(1).upper().startswith("W")
 
-        # Date from the container text
+        # ── Date + season filter ──────────────────────────────────────────────
         match_date = None
         dm = re.search(r'\b(\d{4}-\d{2}-\d{2})\b', result_text)
         if dm:
@@ -1398,11 +1418,16 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end, debug=F
             except Exception:
                 pass
 
-        in_season = True
         if match_date:
-            in_season = season_start <= match_date <= season_end
-        if not in_season:
-            continue
+            if season_start <= match_date <= season_end:
+                season_pass += 1
+            else:
+                season_fail += 1
+                if debug:
+                    print(f"=== USAB season filter: EXCLUDED {match_date.date()} "
+                          f"(window {season_start.date()}–{season_end.date()}) ===")
+                continue
+        # No date → include (can't filter what we can't parse)
 
         matches.append({
             "opponent":   opp,
@@ -1413,6 +1438,8 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end, debug=F
             "score":      score,
         })
 
+    print(f"=== USAB _parse_usab_matches_html: event={event_name!r} "
+          f"kept={len(matches)} season_pass={season_pass} season_fail={season_fail} ===")
     return matches
 
 
@@ -1724,7 +1751,8 @@ async def fetch_usab_profile(wrestler_id, season=None):
                             print(f"=== USAB Livewire first-event effects.html (first 3000):\n{html_frag[:3000]} ===")
 
                         event_matches = _parse_usab_matches_html(
-                            html_frag, event_uuid, season_start, season_end, debug=is_first
+                            html_frag, event_uuid, season_start, season_end,
+                            wrestler_name=wrestler_name, debug=is_first,
                         )
                         print(f"=== USAB Livewire event={event_uuid} parsed {len(event_matches)} matches ===")
                         matches.extend(event_matches)
@@ -1734,7 +1762,8 @@ async def fetch_usab_profile(wrestler_id, season=None):
                 # No Livewire — try parsing match rows directly from the profile page
                 print(f"=== USAB fetch_usab_profile: no Livewire component, parsing profile HTML directly ===")
                 page_matches = _parse_usab_matches_html(
-                    profile_resp.text, "USA Bracketing", season_start, season_end
+                    profile_resp.text, "USA Bracketing", season_start, season_end,
+                    wrestler_name=wrestler_name,
                 )
                 print(f"=== USAB fetch_usab_profile: direct parse found {len(page_matches)} matches ===")
                 matches.extend(page_matches)
@@ -1857,27 +1886,28 @@ async def scrape_combined(request: Request):
             # Season-filter USAB matches (fetch_usab_profile parses dates but
             # doesn't always enforce the season window uniformly)
             season_start, season_end = get_season_range(season)
-            usab_matches = []
+            usab_matches  = []
             usab_filtered = 0
+            usab_passed   = 0
             for m in usab_matches_raw:
                 d = m.get("date")
                 if d:
-                    try:
-                        parsed = None
-                        for fmt in ("%b %d, %Y", "%B %d, %Y", "%Y-%m-%d"):
-                            try:
-                                parsed = datetime.strptime(d, fmt)
-                                break
-                            except ValueError:
-                                pass
-                        if parsed and not (season_start <= parsed <= season_end):
+                    parsed = None
+                    for fmt in ("%b %d, %Y", "%B %d, %Y", "%Y-%m-%d"):
+                        try:
+                            parsed = datetime.strptime(d, fmt)
+                            break
+                        except ValueError:
+                            pass
+                    if parsed:
+                        if season_start <= parsed <= season_end:
+                            usab_passed += 1
+                        else:
                             usab_filtered += 1
                             continue
-                    except Exception:
-                        pass
                 usab_matches.append(m)
-            if usab_filtered:
-                print(f"=== scrape_combined: {name!r} USAB season filter removed {usab_filtered} out-of-season matches ===")
+            print(f"=== scrape_combined: {name!r} USAB season filter: "
+                  f"pass={usab_passed} fail={usab_filtered} no_date={len(usab_matches)-usab_passed} ===")
 
             merged = merge_season_matches(flo_matches, usab_matches)
             print(f"=== scrape_combined: {name!r} flo={len(flo_matches)} usab={len(usab_matches)} merged={len(merged)} ===")
