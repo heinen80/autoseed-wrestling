@@ -2479,15 +2479,26 @@ function siRenderWrestlers() {
   }
   if (empty) empty.style.display = 'none';
   list.innerHTML = siWrestlers.map(function(w, i) {
-    const floTag  = w.flo_id  ? '<span style="color:var(--gold);">Flo</span>'  : '<span style="color:var(--muted);">Flo: none</span>';
-    const usabTag = w.usab_id ? '<span style="color:var(--green);">USAB</span>' : '<span style="color:var(--muted);">USAB: none</span>';
+    const floTag    = w.flo_id  ? '<span style="color:var(--gold);">Flo</span>'   : '<span style="color:var(--muted);">Flo: none</span>';
+    const usabTag   = w.usab_id ? '<span style="color:var(--green);">USAB</span>' : '';
     const matchNote = w.match_count ? ' &nbsp;|&nbsp; ~' + w.match_count + ' matches' : '';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+    const tagRow    = floTag + (usabTag ? ' &nbsp;|&nbsp; ' + usabTag : '') + matchNote;
+    const usabInput = w.usab_id ? '' :
+      '<div style="margin-top:5px;display:flex;gap:4px;align-items:center;">'
+      + '<input id="si-usab-' + i + '" type="text" placeholder="USAB UUID (optional)" '
+      + 'style="font-size:11px;font-family:var(--font-mono);padding:2px 6px;background:var(--surface3);'
+      + 'border:1px solid var(--border);border-radius:4px;color:var(--text);flex:1;min-width:0;" />'
+      + '<button class="btn btn-ghost btn-sm" style="white-space:nowrap;" onclick="siSetUsabId(' + i + ')">Set USAB</button>'
+      + '</div>';
+    return '<div style="padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+      + '<div style="display:flex;align-items:center;gap:10px;">'
       + '<div style="flex:1;">'
       + '<div style="font-weight:600;font-size:13px;">' + w.name + '</div>'
-      + '<div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:2px;">' + floTag + ' &nbsp;|&nbsp; ' + usabTag + matchNote + '</div>'
+      + '<div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:2px;">' + tagRow + '</div>'
       + '</div>'
       + '<button class="btn btn-ghost btn-sm" onclick="siRemoveWrestler(' + i + ')">✕</button>'
+      + '</div>'
+      + usabInput
       + '</div>';
   }).join('');
 }
@@ -2495,6 +2506,16 @@ function siRenderWrestlers() {
 function siRemoveWrestler(i) {
   siWrestlers.splice(i, 1);
   siRenderWrestlers();
+}
+
+function siSetUsabId(i) {
+  const inp = document.getElementById('si-usab-' + i);
+  if (!inp) return;
+  const val = inp.value.trim();
+  if (!val) return;
+  siWrestlers[i].usab_id = val;
+  siRenderWrestlers();
+  toast('USAB UUID set for ' + siWrestlers[i].name);
 }
 
 function siAddWrestler(idx) {

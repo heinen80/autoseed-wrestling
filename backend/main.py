@@ -1600,21 +1600,15 @@ async def fetch_usab_profile(wrestler_id, season=None):
 @app.get("/search/athlete")
 async def search_athlete(name: str, weight: str = None):
     """
-    Search both FloWrestling and USA Bracketing for a wrestler by name.
-    Returns candidate profiles from both platforms for the TD to confirm.
+    Search FloWrestling for a wrestler by name.
+    USAB search is skipped (results load via JS on their site); TDs enter USAB UUIDs manually.
     GET /search/athlete?name=Luke+Heinen&weight=132
     """
     try:
-        flo_res, usab_res = await asyncio.gather(
-            search_flo_athlete(name, weight),
-            search_usab_athlete(name, weight),
-            return_exceptions=True,
-        )
+        flo_res = await search_flo_athlete(name, weight)
         if isinstance(flo_res, Exception):
             flo_res = [{"source": "flo", "error": str(flo_res)}]
-        if isinstance(usab_res, Exception):
-            usab_res = [{"source": "usab", "error": str(usab_res)}]
-        return JSONResponse({"flo": flo_res, "usab": usab_res})
+        return JSONResponse({"flo": flo_res, "usab": []})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
