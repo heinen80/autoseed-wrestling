@@ -1837,6 +1837,25 @@ async def scrape_combined(request: Request):
                 print(f"=== scrape_combined: {name!r} dedup removed {len(merged) - len(deduped)} duplicates ===")
             merged = deduped
 
+            # Normalize every match: guarantee all required fields have usable defaults
+            clean = []
+            for m in merged:
+                opp = (m.get("opponent") or "").strip()
+                if not opp:
+                    continue
+                clean.append({
+                    "opponent":   opp,
+                    "method":     m.get("method") or "dec",
+                    "won":        bool(m.get("won")),   # None -> False, never left as None
+                    "tournament": (m.get("tournament") or "Unknown").strip(),
+                    "date":       m.get("date") or None,
+                    "score":      m.get("score") or None,
+                    "source":     m.get("source") or "unknown",
+                })
+            if len(clean) != len(merged):
+                print(f"=== scrape_combined: {name!r} dropped {len(merged) - len(clean)} matches with empty opponent ===")
+            merged = clean
+
             wrestler_name = (
                 (flo_profile  or {}).get("wrestler_name") or
                 (usab_profile or {}).get("wrestler_name") or
@@ -1865,24 +1884,43 @@ async def scrape_combined(request: Request):
         if not profiles:
             return JSONResponse({"error": "No wrestler profiles could be built", "errors": errors}, status_code=400)
 
-        field_names  = {p.get("wrestler_name") or p.get("wrestler_id") for p in profiles}
-        all_matches  = build_seedit_matches(profiles, weight_override)
-        h2h_matches  = build_seedit_matches(profiles, weight_override, field_names=field_names)
+        try:
+            import traceback as _tb
+            field_names = {p.get("wrestler_name") or p.get("wrestler_id") for p in profiles}
+            print(f"=== scrape_combined: field_names={field_names} ===")
 
-        if not all_matches:
-            return JSONResponse({
-                "error":    "No match data found for the current season",
-                "profiles": profiles,
-                "errors":   errors,
-                "tip":      "Check wrestler names and season filter",
-            }, status_code=200)
+            all_matches = build_seedit_matches(profiles, weight_override)
+            print(f"=== scrape_combined: all_matches={len(all_matches)} ===")
+            for i, m in enumerate(all_matches[:3]):
+                print(f"=== scrape_combined: all_matches[{i}]={m} ===")
 
-        results_out = _run_seeding_engine(
-            profiles, all_matches, h2h_matches, field_names,
-            source="combined", errors=errors,
-        )
-        return JSONResponse(results_out)
+            h2h_matches = build_seedit_matches(profiles, weight_override, field_names=field_names)
+            print(f"=== scrape_combined: h2h_matches={len(h2h_matches)} ===")
+
+            if not all_matches:
+                return JSONResponse({
+                    "error":    "No match data found for the current season",
+                    "profiles": profiles,
+                    "errors":   errors,
+                    "tip":      "Check wrestler names and season filter",
+                }, status_code=200)
+
+            print(f"=== scrape_combined: calling _run_seeding_engine ===")
+            results_out = _run_seeding_engine(
+                profiles, all_matches, h2h_matches, field_names,
+                source="combined", errors=errors,
+            )
+            print(f"=== scrape_combined: seeding done, weight keys={list(results_out.keys())} ===")
+            return JSONResponse(results_out)
+
+        except Exception as seed_err:
+            import traceback as _tb
+            tb_str = _tb.format_exc()
+            print(f"=== scrape_combined SEEDING ERROR: {seed_err}\n{tb_str} ===")
+            return JSONResponse({"error": str(seed_err), "trace": tb_str}, status_code=500)
 
     except Exception as e:
-        import traceback
-        return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
+        import traceback as _tb
+        tb_str = _tb.format_exc()
+        print(f"=== scrape_combined OUTER ERROR: {e}\n{tb_str} ===")
+        return JSONResponse({"error": str(e), "trace": tb_str}, status_code=500)
