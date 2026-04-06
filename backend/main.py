@@ -1307,19 +1307,31 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
     Parse bout results from a USAB Livewire HTML fragment.
 
     Bout format: "WINNER , TEAM over LOSER , TEAM ( METHOD SCORE )"
-    Win/loss is determined by splitting on " over " (case-insensitive) and
-    checking whether wrestler_name appears in the first half (win) or second
-    half (loss).  Falls back to W/L token search if "over" is absent.
+    Win/loss is determined by splitting on the last " over " in the bout line
+    and checking whether wrestler_name appears before (win) or after (loss).
 
     Returns a list of match dicts compatible with merge_season_matches.
     """
     soup = BeautifulSoup(html, "html.parser")
 
+    # ── Extract event date from the header (MM/DD/YYYY or MM/DD - MM/DD/YYYY) ──
+    # Find all full dates in the HTML; use the first one as the event date.
+    event_date = None
+    for dm in re.finditer(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', html):
+        try:
+            event_date = datetime.strptime(dm.group(1), "%m/%d/%Y")
+            break
+        except ValueError:
+            pass
+    print(f"=== USAB _parse_usab_matches_html: event={event_name!r} event_date={event_date} ===")
+
+    # ── Build a list of plain-text lines for bout-line searching ──────────────
+    # Splitting on newlines gives one logical row per line (matches "Name over Name (Method)").
+    all_lines = [ln.strip() for ln in soup.get_text("\n", strip=True).split("\n") if ln.strip()]
     if debug:
-        all_text = soup.get_text(" | ", strip=True)
-        print(f"=== USAB _parse_usab_matches_html DEBUG all_text:\n{all_text[:3000]} ===")
+        print(f"=== USAB all_lines (first 30):\n" + "\n".join(all_lines[:30]) + " ===")
         athlete_links = [a["href"] for a in soup.find_all("a", href=True) if "/athletes/" in a["href"]]
-        print(f"=== USAB _parse_usab_matches_html DEBUG athlete hrefs: {athlete_links} ===")
+        print(f"=== USAB athlete hrefs: {athlete_links} ===")
 
     result_re = re.compile(
         r'\b(Dec|TF|MD|Fall|Forfeit|For\.?|Inj\.?\s*Def\.?)\b'
@@ -1329,27 +1341,24 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
     over_re = re.compile(r'\bover\b', re.IGNORECASE)
 
     # Pre-compute name tokens for W/L detection
-    # USAB may format as "Lastname, Firstname" or "Firstname Lastname" or abbreviate
     wrestler_norm = wrestler_name.lower().strip() if wrestler_name else ""
     if wrestler_norm:
         if "," in wrestler_norm:
-            # "Heinen, Luke" → last="heinen", first="luke"
             parts = [p.strip() for p in wrestler_norm.split(",", 1)]
             wname_last  = parts[0]
             wname_first = parts[1].split()[0] if parts[1] else ""
         else:
-            # "Luke Heinen" → last="heinen", first="luke"
             tokens = wrestler_norm.split()
             wname_last  = tokens[-1] if tokens else ""
             wname_first = tokens[0]  if len(tokens) > 1 else ""
     else:
         wname_last = wname_first = ""
 
-    matches      = []
-    seen_opps    = set()
-    season_pass  = 0
-    season_fail  = 0
-    bout_log_count = 0  # log first 10 bouts per event regardless of debug flag
+    matches        = []
+    seen_opps      = set()
+    season_pass    = 0
+    season_fail    = 0
+    bout_log_count = 0
 
     # Find every link to a different athlete profile — each is one bout
     for a_tag in soup.find_all("a", href=True):
@@ -1363,24 +1372,22 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
             continue
         seen_opps.add(opp_key)
 
-        # Walk up the DOM (up to 6 levels) to find a container with a result token
-        container   = a_tag.parent
+        # ── Find the bout line: scan text lines for one that contains the
+        #    opponent name + "over" + a result token.  This avoids the DOM walk
+        #    landing on "MAT 09 -" or other short containers.
+        opp_lower   = opp.lower()
         result_text = ""
-        for _ in range(6):
-            if container is None:
+        for line in all_lines:
+            line_lower = line.lower()
+            if opp_lower in line_lower and over_re.search(line) and result_re.search(line):
+                result_text = line
                 break
-            ct = container.get_text(" ", strip=True)
-            if result_re.search(ct) and len(ct) > len(opp) + 2:
-                result_text = ct
-                break
-            container = container.parent
-
+        # Fallback: any line containing the opponent + result token (no "over" required)
         if not result_text:
-            idx = html.find(opp)
-            if idx != -1:
-                snippet = html[max(0, idx - 200): idx + 200]
-                if result_re.search(snippet):
-                    result_text = BeautifulSoup(snippet, "html.parser").get_text(" ", strip=True)
+            for line in all_lines:
+                if opp.lower() in line.lower() and result_re.search(line):
+                    result_text = line
+                    break
 
         rm = result_re.search(result_text)
         if not rm:
@@ -1449,6 +1456,7 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                   f"wl_method={wl_method!r} won={won}{over_preview} ===")
 
         # ── Date + season filter ──────────────────────────────────────────────
+        # Try ISO date in the bout line first; fall back to the event header date.
         match_date = None
         dm = re.search(r'\b(\d{4}-\d{2}-\d{2})\b', result_text)
         if dm:
@@ -1456,17 +1464,26 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 match_date = datetime.strptime(dm.group(1), "%Y-%m-%d")
             except Exception:
                 pass
+        if match_date is None:
+            # Also try MM/DD/YYYY in the bout line
+            dm2 = re.search(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', result_text)
+            if dm2:
+                try:
+                    match_date = datetime.strptime(dm2.group(1), "%m/%d/%Y")
+                except Exception:
+                    pass
+        if match_date is None:
+            match_date = event_date  # use header date extracted at top of function
 
         if match_date:
             if season_start <= match_date <= season_end:
                 season_pass += 1
             else:
                 season_fail += 1
-                if debug:
-                    print(f"=== USAB season filter: EXCLUDED {match_date.date()} "
-                          f"(window {season_start.date()}–{season_end.date()}) ===")
+                print(f"=== USAB season filter: EXCLUDED {match_date.date()} vs {opp!r} "
+                      f"(window {season_start.date()}–{season_end.date()}) ===")
                 continue
-        # No date → include (can't filter what we can't parse)
+        # No date at all → include (can't filter what we can't parse)
 
         matches.append({
             "opponent":   opp,
