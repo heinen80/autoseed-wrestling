@@ -1367,66 +1367,79 @@ async def search_flo_athlete(name, weight=None):
 async def search_usab_athlete(name, weight=None, client=None):
     """
     Search USA Bracketing for a wrestler by name.
-    Login flow: GET /login for CSRF token (meta[name=csrf-token] or input[name=_token]),
-    POST /login with form data {_token, username, password, remember=on}.
-    Search: GET /athletes?search=NAME — parse HTML for athlete names and profile UUIDs.
+    Login flow:
+      1. GET /login — extract _token from hidden input name="_token"
+         (also available as <meta name="csrf-token" content="...">)
+      2. POST /login with form fields: _token, login (NOT username), password, remember
+      3. Successful login redirects to dashboard (URL no longer contains /login)
+    Search: GET /athletes?search=NAME — parse HTML for UUID profile links.
     Weight is only used as a label — not a search filter.
     """
-    username = os.environ.get("USB_USERNAME", "")
-    password = os.environ.get("USB_PASSWORD", "")
-    own_client = client is None
+    login_field = os.environ.get("USB_USERNAME", "")
+    password    = os.environ.get("USB_PASSWORD", "")
+    own_client  = client is None
     try:
         if own_client:
             client = httpx.AsyncClient(timeout=15, follow_redirects=True)
 
         # Authenticate when credentials are configured
-        if username and password:
-            # Fetch login page to get CSRF token
+        if login_field and password:
+            # Step 1: GET login page and extract CSRF token
             login_page = await client.get(
                 f"{USAB_API_BASE}/login",
                 headers=USAB_HEADERS,
             )
             html = login_page.text
-            # Try meta tag first (name="csrf-token"), then hidden input (name="_token")
+            # Prefer hidden input name="_token"; fall back to meta name="csrf-token"
             token_match = (
-                re.search(r'<meta\s+name="csrf-token"\s+content="([^"]+)"', html) or
-                re.search(r'name="_token"\s+value="([^"]+)"', html) or
-                re.search(r'name="_token"[^>]*value="([^"]+)"', html)
+                re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', html) or
+                re.search(r'<input[^>]+value="([^"]+)"[^>]+name="_token"', html) or
+                re.search(r'<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"', html)
             )
             csrf_token = token_match.group(1) if token_match else ""
-            print(f"=== search_usab_athlete DEBUG: csrf_token={csrf_token!r} ===")
+            print(f"=== search_usab_athlete: csrf_token={csrf_token!r} login_page_status={login_page.status_code} ===")
+
+            # Step 2: POST login with correct field names
             login_resp = await client.post(
                 f"{USAB_API_BASE}/login",
-                data={"_token": csrf_token, "username": username, "password": password, "remember": "on"},
+                data={
+                    "_token":  csrf_token,
+                    "login":   login_field,   # field name is "login", not "username"
+                    "password": password,
+                    "remember": "on",
+                },
                 headers=dict(USAB_HEADERS, **{"content-type": "application/x-www-form-urlencoded"}),
             )
-            print(f"=== search_usab_athlete DEBUG: login status={login_resp.status_code} ===")
+            # Step 3: Check redirect landed on dashboard (not back on /login)
+            landed = str(login_resp.url)
+            logged_in = "/login" not in landed
+            print(f"=== search_usab_athlete: login status={login_resp.status_code} landed={landed} logged_in={logged_in} ===")
 
+        # Search athletes
         search_resp = await client.get(
             f"{USAB_API_BASE}/athletes",
             params={"search": name},
             headers=USAB_HEADERS,
         )
-        print(f"=== search_usab_athlete DEBUG: search status={search_resp.status_code} url={search_resp.url} ===")
-        print(f"=== search_usab_athlete DEBUG: response body (first 2000):\n{search_resp.text[:2000]} ===")
+        print(f"=== search_usab_athlete: search status={search_resp.status_code} url={search_resp.url} ===")
+        print(f"=== search_usab_athlete: response body (first 2000):\n{search_resp.text[:2000]} ===")
 
-        # Parse HTML for athlete rows — look for profile links with UUIDs
-        html = search_resp.text
+        # Parse HTML for profile links containing UUIDs
+        html    = search_resp.text
         results = []
-        # Match links like /athletes/UUID-slug with an athlete name
         for m in re.finditer(
-            r'href="[^"]*?/athletes/([0-9a-f-]{36})[^"]*"[^>]*>([^<]+)</a>',
+            r'href="[^"]*?/athletes/([0-9a-f-]{36})[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
             html, re.IGNORECASE
         ):
             uid, athlete_name = m.group(1), m.group(2).strip()
-            if not athlete_name or athlete_name.lower() in ("view", "profile", "details"):
+            if not athlete_name or athlete_name.lower() in ("view", "profile", "details", ""):
                 continue
             results.append({
-                "source": "usab",
-                "id":     uid,
-                "name":   athlete_name,
+                "source":   "usab",
+                "id":       uid,
+                "name":     athlete_name,
                 "location": "",
-                "weight": str(weight or ""),
+                "weight":   str(weight or ""),
             })
             if len(results) >= 5:
                 break
