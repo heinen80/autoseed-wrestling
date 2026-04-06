@@ -1325,8 +1325,10 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
             pass
     print(f"=== USAB _parse_usab_matches_html: event={event_name!r} event_date={event_date} ===")
 
+    # Join all visible text with " | " — used both for debug and as fallback
+    # when the DOM walk returns a truncated mat-number prefix.
+    all_text = soup.get_text(" | ", strip=True)
     if debug:
-        all_text = soup.get_text(" | ", strip=True)
         print(f"=== USAB _parse_usab_matches_html DEBUG all_text:\n{all_text[:3000]} ===")
         athlete_links = [a["href"] for a in soup.find_all("a", href=True) if "/athletes/" in a["href"]]
         print(f"=== USAB _parse_usab_matches_html DEBUG athlete hrefs: {athlete_links} ===")
@@ -1373,6 +1375,12 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
             continue
         seen_opps.add(opp_key)
 
+        # Skip self-matches: wrestler's own profile link appears on their page
+        if wname_last and wname_last in opp_key:
+            if not wname_first or wname_first in opp_key:
+                print(f"=== USAB parser: skipping self-match opp={opp!r} (wrestler={wrestler_name!r}) ===")
+                continue
+
         # Walk up the DOM (up to 6 levels) to find a container with a result token.
         # get_text(" ", ...) joins all child text with spaces, reconstructing the
         # full bout line even when Tailwind splits names/teams into separate nodes.
@@ -1394,6 +1402,17 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 snippet = html[max(0, idx - 200): idx + 200]
                 if result_re.search(snippet):
                     result_text = BeautifulSoup(snippet, "html.parser").get_text(" ", strip=True)
+
+        # If result_text looks like a truncated mat-number prefix ("MAT 09 -") with
+        # no "over" keyword, search all_text for the full bout line containing both
+        # the opponent name and "over" so W/L direction can be determined correctly.
+        if result_text and not over_re.search(result_text):
+            opp_lower = opp.lower()
+            for seg in re.split(r'[|\n]', all_text):
+                seg_lower = seg.lower()
+                if opp_lower in seg_lower and over_re.search(seg) and result_re.search(seg):
+                    result_text = seg.strip()
+                    break
 
         rm = result_re.search(result_text)
         if not rm:
