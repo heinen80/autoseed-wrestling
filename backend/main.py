@@ -1236,6 +1236,14 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
             "profiles_scraped":      len(profiles),
             "matches_processed":     len(h2h_matches),
             "errors":                errors,
+            "profiles_index":        {
+                p["wrestler_name"]: {
+                    "flo_record":  p.get("flo_record"),
+                    "usab_record": p.get("usab_record"),
+                }
+                for p in profiles
+                if p.get("wrestler_name")
+            },
         }
 
     return results_out
@@ -1844,8 +1852,34 @@ async def scrape_combined(request: Request):
                 usab_profile = None
 
             flo_matches  = (flo_profile  or {}).get("matches", [])
-            usab_matches = (usab_profile or {}).get("matches", [])
-            merged       = merge_season_matches(flo_matches, usab_matches)
+            usab_matches_raw = (usab_profile or {}).get("matches", [])
+
+            # Season-filter USAB matches (fetch_usab_profile parses dates but
+            # doesn't always enforce the season window uniformly)
+            season_start, season_end = get_season_range(season)
+            usab_matches = []
+            usab_filtered = 0
+            for m in usab_matches_raw:
+                d = m.get("date")
+                if d:
+                    try:
+                        parsed = None
+                        for fmt in ("%b %d, %Y", "%B %d, %Y", "%Y-%m-%d"):
+                            try:
+                                parsed = datetime.strptime(d, fmt)
+                                break
+                            except ValueError:
+                                pass
+                        if parsed and not (season_start <= parsed <= season_end):
+                            usab_filtered += 1
+                            continue
+                    except Exception:
+                        pass
+                usab_matches.append(m)
+            if usab_filtered:
+                print(f"=== scrape_combined: {name!r} USAB season filter removed {usab_filtered} out-of-season matches ===")
+
+            merged = merge_season_matches(flo_matches, usab_matches)
             print(f"=== scrape_combined: {name!r} flo={len(flo_matches)} usab={len(usab_matches)} merged={len(merged)} ===")
             # Dedup merged by (tournament, opponent) as a safety net
             seen_keys = set()
@@ -1892,6 +1926,11 @@ async def scrape_combined(request: Request):
             if not merged:
                 errors.append(f"No season matches found for {name}")
 
+            flo_w  = sum(1 for m in merged if m.get("source") == "flo"  and m.get("won"))
+            flo_l  = sum(1 for m in merged if m.get("source") == "flo"  and not m.get("won"))
+            usab_w = sum(1 for m in merged if m.get("source") == "usab" and m.get("won"))
+            usab_l = sum(1 for m in merged if m.get("source") == "usab" and not m.get("won"))
+
             profiles.append({
                 "wrestler_id":   flo_id or usab_id or name,
                 "wrestler_name": wrestler_name,
@@ -1900,6 +1939,8 @@ async def scrape_combined(request: Request):
                 "match_count":   len(merged),
                 "flo_id":        flo_id,
                 "usab_id":       usab_id,
+                "flo_record":    f"{flo_w}-{flo_l}" if (flo_w or flo_l) else None,
+                "usab_record":   f"{usab_w}-{usab_l}" if (usab_w or usab_l) else None,
                 "error":         None,
             })
 
