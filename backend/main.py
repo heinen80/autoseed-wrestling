@@ -65,6 +65,23 @@ def root():
 
 # —————————
 
+def sanitize_for_json(obj):
+    """
+    Recursively replace float NaN/Inf values with 0.0 so JSONResponse never
+    raises "Out of range float values are not JSON compliant".
+    Also converts pandas NaN (which is float('nan')) coming from to_dict().
+    """
+    if isinstance(obj, float):
+        return 0.0 if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(sanitize_for_json(v) for v in obj)
+    return obj
+
+
 def build_history(matches):
     """
     Build per-wrestler win/loss history.
@@ -778,6 +795,7 @@ from datetime import datetime, timedelta
 import re
 import asyncio
 import json
+import math
 from bs4 import BeautifulSoup
 
 FLO_BASE = "https://flowrestling.org"
@@ -1088,7 +1106,7 @@ async def scrape_flo(request: Request):
             profiles, all_matches, h2h_matches, field_names,
             source="flo", errors=errors,
         )
-        return JSONResponse(results_out)
+        return JSONResponse(sanitize_for_json(results_out))
 
     except Exception as e:
         import traceback
@@ -1131,6 +1149,10 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
 
     for weight, all_group in df_all.groupby("weight"):
         all_gm = all_group.to_dict(orient="records")
+        # pandas converts None -> float NaN in object columns; convert back to None
+        for row in all_gm:
+            if isinstance(row.get("date"), float):
+                row["date"] = None
 
         # Full history: all opponents for accurate SOS / quality / common-opponent.
         full_history = build_history(all_gm)
@@ -1911,7 +1933,7 @@ async def scrape_combined(request: Request):
                 source="combined", errors=errors,
             )
             print(f"=== scrape_combined: seeding done, weight keys={list(results_out.keys())} ===")
-            return JSONResponse(results_out)
+            return JSONResponse(sanitize_for_json(results_out))
 
         except Exception as seed_err:
             import traceback as _tb
