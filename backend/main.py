@@ -1397,7 +1397,7 @@ async def search_usab_athlete(name, weight=None, client=None):
                 re.search(r'<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"', html)
             )
             csrf_token = token_match.group(1) if token_match else ""
-            print(f"=== search_usab_athlete: csrf_token={csrf_token!r} login_page_status={login_page.status_code} ===")
+            print(f"=== USAB login_page status={login_page.status_code} csrf_token={csrf_token!r} ===")
 
             # Step 2: POST login with correct field names
             login_resp = await client.post(
@@ -1413,16 +1413,30 @@ async def search_usab_athlete(name, weight=None, client=None):
             # Step 3: Check redirect landed on dashboard (not back on /login)
             landed = str(login_resp.url)
             logged_in = "/login" not in landed
-            print(f"=== search_usab_athlete: login status={login_resp.status_code} landed={landed} logged_in={logged_in} ===")
+            cookies_after = {k: v for k, v in client.cookies.items()}
+            print(f"=== USAB login POST status={login_resp.status_code} landed={landed!r} logged_in={logged_in} ===")
+            print(f"=== USAB cookies after login: {list(cookies_after.keys())} ===")
+            if not logged_in:
+                print(f"=== USAB LOGIN FAILED — still on login page. Response body (first 500):\n{login_resp.text[:500]} ===")
+            else:
+                print(f"=== USAB LOGIN SUCCEEDED ===")
+        else:
+            print(f"=== USAB skipping login: login_field={bool(login_field)} password={bool(password)} ===")
 
-        # Search athletes
+        # Split name into first/last for the search query
+        parts      = name.strip().split(None, 1)
+        first_name = parts[0] if parts else name
+        last_name  = parts[1] if len(parts) > 1 else ""
+        search_url = f"{USAB_API_BASE}/athletes"
+        search_params = {"first_name": first_name, "last_name": last_name}
+        print(f"=== USAB search URL={search_url} params={search_params} ===")
         search_resp = await client.get(
-            f"{USAB_API_BASE}/athletes",
-            params={"search": name},
+            search_url,
+            params=search_params,
             headers=USAB_HEADERS,
         )
-        print(f"=== search_usab_athlete: search status={search_resp.status_code} url={search_resp.url} ===")
-        print(f"=== search_usab_athlete: response body (first 2000):\n{search_resp.text[:2000]} ===")
+        print(f"=== USAB search status={search_resp.status_code} final_url={search_resp.url} ===")
+        print(f"=== USAB search response (first 1000):\n{search_resp.text[:1000]} ===")
 
         # Parse HTML for profile links containing UUIDs
         html    = search_resp.text
