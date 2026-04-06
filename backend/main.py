@@ -1606,15 +1606,13 @@ async def fetch_usab_profile(wrestler_id, season=None):
                 wire_id      = lw_el.get("wire:id", "")
                 print(f"=== USAB fetch_usab_profile: Livewire wire:id={wire_id!r} snapshot (first 500)={snapshot_str[:500]!r} ===")
 
-                # Collect all UUIDs embedded in the snapshot (these are event IDs)
-                all_uuids  = re.findall(
-                    r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
-                    snapshot_str, re.IGNORECASE,
-                )
-                event_uuids = list(dict.fromkeys(
-                    u for u in all_uuids if u.lower() != str(wrestler_id).lower()
-                ))
-                print(f"=== USAB fetch_usab_profile: event UUIDs in snapshot: {event_uuids} ===")
+                # Event UUIDs are in wire:click="showResults('UUID')" on the raw page HTML
+                # (events render lazily, so UUIDs are NOT in the snapshot data itself)
+                event_uuids = list(dict.fromkeys(re.findall(
+                    r"showResults\('([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'\)",
+                    profile_resp.text, re.IGNORECASE,
+                )))
+                print(f"=== USAB fetch_usab_profile: event UUIDs from wire:click: {event_uuids} ===")
 
                 # Get CSRF token for Livewire AJAX requests
                 meta_csrf  = soup.find("meta", attrs={"name": "csrf-token"})
@@ -1626,11 +1624,12 @@ async def fetch_usab_profile(wrestler_id, season=None):
                         lw_resp = await client.post(
                             f"{USAB_API_BASE}/livewire/update",
                             json={
+                                "_token": csrf_token,
                                 "components": [{
                                     "snapshot": snapshot_str,
                                     "updates":  {},
                                     "calls":    [{"path": "", "method": "showResults", "params": [event_uuid]}],
-                                }]
+                                }],
                             },
                             headers=dict(USAB_HEADERS, **{
                                 "accept":       "text/html, application/xhtml+xml",
