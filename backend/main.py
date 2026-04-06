@@ -778,6 +778,7 @@ from datetime import datetime, timedelta
 import re
 import asyncio
 import json
+from bs4 import BeautifulSoup
 
 FLO_BASE = "https://flowrestling.org"
 FLO_GRAPHQL = "https://www.flowrestling.org/api/graphql"
@@ -1438,25 +1439,59 @@ async def search_usab_athlete(name, weight=None, client=None):
         print(f"=== USAB search status={search_resp.status_code} final_url={search_resp.url} ===")
         print(f"=== USAB search response (first 1000):\n{search_resp.text[:1000]} ===")
 
-        # Parse HTML for profile links containing UUIDs
-        html    = search_resp.text
+        # Parse HTML for athlete profile links using BeautifulSoup
+        html = search_resp.text
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Debug: print all hrefs containing "/athletes/"
+        all_athlete_hrefs = [a["href"] for a in soup.find_all("a", href=True) if "/athletes/" in a["href"]]
+        print(f"=== USAB all /athletes/ hrefs ({len(all_athlete_hrefs)}): {all_athlete_hrefs[:20]} ===")
+
+        uuid_re = re.compile(r'/athletes/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', re.IGNORECASE)
+        seen    = set()
         results = []
-        for m in re.finditer(
-            r'href="[^"]*?/athletes/([0-9a-f-]{36})[^"]*"[^>]*>\s*([^<]+?)\s*</a>',
-            html, re.IGNORECASE
-        ):
-            uid, athlete_name = m.group(1), m.group(2).strip()
-            if not athlete_name or athlete_name.lower() in ("view", "profile", "details", ""):
+        for a in soup.find_all("a", href=True):
+            m = uuid_re.search(a["href"])
+            if not m:
                 continue
+            uid = m.group(1)
+            if uid in seen:
+                continue
+            seen.add(uid)
+
+            # Athlete name: text of the link itself, or nearest heading/strong in parent card
+            raw_name = a.get_text(" ", strip=True)
+            if not raw_name or raw_name.lower() in ("view", "profile", "details", "more"):
+                # Walk up to card container and grab first non-empty heading or strong
+                card = a.find_parent(["div", "article", "li", "tr"])
+                if card:
+                    heading = card.find(["h1", "h2", "h3", "h4", "strong", "b"])
+                    raw_name = heading.get_text(" ", strip=True) if heading else ""
+
+            if not raw_name:
+                continue
+
+            # State badge: look for a span/div with a 2-letter uppercase text near the card
+            location = ""
+            card = a.find_parent(["div", "article", "li", "tr"])
+            if card:
+                for el in card.find_all(["span", "div", "td"]):
+                    txt = el.get_text(strip=True)
+                    if re.fullmatch(r'[A-Z]{2}', txt):
+                        location = txt
+                        break
+
             results.append({
                 "source":   "usab",
                 "id":       uid,
-                "name":     athlete_name,
-                "location": "",
+                "name":     raw_name,
+                "location": location,
                 "weight":   str(weight or ""),
             })
             if len(results) >= 5:
                 break
+
+        print(f"=== USAB parsed {len(results)} results: {[r['name'] for r in results]} ===")
         return results
     except Exception as e:
         return [{"source": "usab", "error": str(e)}]
