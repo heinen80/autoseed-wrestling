@@ -1271,73 +1271,102 @@ async def _usab_login(client):
     return logged_in
 
 
-def _parse_usab_matches_html(html, event_name, season_start, season_end):
+def _parse_usab_matches_html(html, event_name, season_start, season_end, debug=False):
     """
-    Parse bout rows from a USAB HTML fragment (profile page or Livewire response).
-    Looks for table rows / list items / div cards that contain an opponent athlete link.
+    Parse bout results from a USAB Livewire HTML fragment.
+
+    The site uses Tailwind utility classes (no semantic bout/match/row class names),
+    so we anchor on opponent athlete links (/athletes/UUID) and walk up the DOM
+    to find a container that also contains a result token (Dec/TF/MD/Fall/Forfeit).
+
     Returns a list of match dicts compatible with merge_season_matches.
     """
-    soup    = BeautifulSoup(html, "html.parser")
-    matches = []
-    win_type_re = re.compile(
-        r'\b(dec(?:ision)?|tf|tech(?:nical)?[\s_-]*fall|md|major[\s_-]*dec(?:ision)?'
-        r'|fall|pin|forfeit|for\.?|inj\.?\s*def(?:ault)?)\b',
+    soup = BeautifulSoup(html, "html.parser")
+
+    if debug:
+        # Print all text tokens so we can see the actual content
+        all_text = soup.get_text(" | ", strip=True)
+        print(f"=== USAB _parse_usab_matches_html DEBUG all_text:\n{all_text[:3000]} ===")
+        # Print all athlete hrefs
+        athlete_links = [a["href"] for a in soup.find_all("a", href=True) if "/athletes/" in a["href"]]
+        print(f"=== USAB _parse_usab_matches_html DEBUG athlete hrefs: {athlete_links} ===")
+
+    result_re = re.compile(
+        r'\b(Dec|TF|MD|Fall|Forfeit|For\.?|Inj\.?\s*Def\.?)\b'
+        r'(?:\s+(\d{1,3}[-–]\d{1,3}))?',
         re.IGNORECASE,
     )
 
-    for row in soup.find_all(["tr", "li", "div"],
-                             class_=re.compile(r'bout|match|result|row|card', re.IGNORECASE)):
-        # Must contain a link to another athlete profile
-        opp = ""
-        for a in row.find_all("a", href=True):
-            if "/athletes/" in a["href"]:
-                t = a.get_text(strip=True)
-                if t and t.lower() not in ("view", "profile", "details"):
-                    opp = t
-                    break
-        if not opp:
+    matches = []
+    seen_opps = set()
+
+    # Find every link to a different athlete profile — each is one bout
+    for a_tag in soup.find_all("a", href=True):
+        if "/athletes/" not in a_tag["href"]:
+            continue
+        opp = a_tag.get_text(strip=True)
+        if not opp or opp.lower() in ("view", "profile", "details", "more", ""):
+            continue
+        opp_key = opp.lower()
+        if opp_key in seen_opps:
+            continue
+        seen_opps.add(opp_key)
+
+        # Walk up the DOM (up to 6 levels) until we find a node whose text
+        # contains a result token AND is wide enough to be a "row" container.
+        container = a_tag.parent
+        result_text = ""
+        for _ in range(6):
+            if container is None:
+                break
+            ct = container.get_text(" ", strip=True)
+            if result_re.search(ct) and len(ct) > len(opp) + 2:
+                result_text = ct
+                break
+            container = container.parent
+
+        if not result_text:
+            # Widen search: use the full soup text around this opponent mention
+            idx = html.find(opp)
+            if idx != -1:
+                snippet = html[max(0, idx - 200): idx + 200]
+                if result_re.search(snippet):
+                    result_text = BeautifulSoup(snippet, "html.parser").get_text(" ", strip=True)
+
+        # Parse result method + score
+        rm = result_re.search(result_text)
+        if not rm:
+            if debug:
+                print(f"=== USAB parser: no result token near opponent {opp!r}, skipping ===")
             continue
 
-        row_text = row.get_text(" ", strip=True)
-
-        # Win/loss: look for a standalone W or L cell/span
-        won = None
-        for el in row.find_all(["td", "span", "div", "strong"]):
-            t = el.get_text(strip=True).upper()
-            if t in ("W", "WIN", "WON"):
-                won = True
-                break
-            if t in ("L", "LOSS", "LOST"):
-                won = False
-                break
-
-        # Win method
-        wt = win_type_re.search(row_text)
-        if wt:
-            raw = wt.group(1).lower().replace(" ", "").replace("-", "").replace("_", "")
-            if "fall" in raw or "pin" in raw:
-                method = "fall"
-            elif "tf" in raw or "tech" in raw:
-                method = "tf"
-            elif "md" in raw or "major" in raw:
-                method = "md"
-            else:
-                method = "dec"
+        raw_method = rm.group(1).lower().replace(".", "").replace(" ", "")
+        score      = rm.group(2) or None
+        if "fall" in raw_method:
+            method = "fall"
+        elif raw_method in ("tf",):
+            method = "tf"
+        elif raw_method in ("md",):
+            method = "md"
+        elif raw_method in ("for", "forfeit"):
+            method = "dec"
         else:
             method = "dec"
 
-        # Date: look for ISO-like strings
-        date_str  = None
+        # Win/loss: look for standalone W / L / Win / Loss tokens in the container
+        won = None
+        wl_m = re.search(r'\b(W(?:in|on)?|L(?:oss|ost)?)\b', result_text)
+        if wl_m:
+            won = wl_m.group(1).upper().startswith("W")
+
+        # Date from the container text
         match_date = None
-        dm = re.search(r'\b(\d{4}-\d{2}-\d{2}|\w+ \d{1,2},?\s+\d{4})\b', row_text)
+        dm = re.search(r'\b(\d{4}-\d{2}-\d{2})\b', result_text)
         if dm:
-            date_str = dm.group(1)
-            for fmt in ("%Y-%m-%d", "%B %d, %Y", "%B %d %Y", "%b %d, %Y", "%b %d %Y"):
-                try:
-                    match_date = datetime.strptime(date_str[:len(fmt)], fmt)
-                    break
-                except Exception:
-                    pass
+            try:
+                match_date = datetime.strptime(dm.group(1), "%Y-%m-%d")
+            except Exception:
+                pass
 
         in_season = True
         if match_date:
@@ -1351,7 +1380,7 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end):
             "won":        bool(won),
             "tournament": str(event_name or "USA Bracketing"),
             "date":       match_date.strftime("%b %d, %Y") if match_date else None,
-            "score":      None,
+            "score":      score,
         })
 
     return matches
@@ -1619,7 +1648,8 @@ async def fetch_usab_profile(wrestler_id, season=None):
                 csrf_token = meta_csrf["content"] if meta_csrf else ""
 
                 # Step 3: call showResults for each event via Livewire
-                for event_uuid in event_uuids[:15]:
+                for ev_idx, event_uuid in enumerate(event_uuids[:15]):
+                    is_first = ev_idx == 0
                     try:
                         lw_resp = await client.post(
                             f"{USAB_API_BASE}/livewire/update",
@@ -1641,23 +1671,30 @@ async def fetch_usab_profile(wrestler_id, season=None):
                         )
                         print(f"=== USAB Livewire showResults event={event_uuid} status={lw_resp.status_code} ===")
                         lw_text = lw_resp.text
-                        print(f"=== USAB Livewire response (first 1000):\n{lw_text[:1000]} ===")
+                        if is_first:
+                            print(f"=== USAB Livewire first-event raw response (first 3000):\n{lw_text[:3000]} ===")
 
-                        # Livewire v3 returns JSON with {"components": [{"effects": {"html": "..."}}]}
-                        # Livewire v2 returns JSON with {"effects": {"html": "..."}}
+                        # Extract effects.html from Livewire JSON response
+                        # v3: {"components": [{"effects": {"html": "..."}}]}
+                        # v2: {"effects": {"html": "..."}}
+                        html_frag = ""
                         try:
-                            lw_json  = lw_resp.json()
-                            comps    = lw_json.get("components") or []
-                            html_frag = ""
+                            lw_json = lw_resp.json()
+                            comps   = lw_json.get("components") or []
                             if comps:
                                 html_frag = (comps[0].get("effects") or {}).get("html") or ""
                             if not html_frag:
-                                html_frag = (lw_json.get("effects") or {}).get("html") or lw_text
+                                html_frag = (lw_json.get("effects") or {}).get("html") or ""
                         except Exception:
-                            html_frag = lw_text
+                            pass
+                        if not html_frag:
+                            html_frag = lw_text  # fallback: treat raw response as HTML
+
+                        if is_first:
+                            print(f"=== USAB Livewire first-event effects.html (first 3000):\n{html_frag[:3000]} ===")
 
                         event_matches = _parse_usab_matches_html(
-                            html_frag, event_uuid, season_start, season_end
+                            html_frag, event_uuid, season_start, season_end, debug=is_first
                         )
                         print(f"=== USAB Livewire event={event_uuid} parsed {len(event_matches)} matches ===")
                         matches.extend(event_matches)
