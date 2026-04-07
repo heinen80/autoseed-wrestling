@@ -1892,29 +1892,76 @@ async def search_athlete(name: str, weight: str = None):
 
 
 @app.get("/search/usab")
-async def search_usab(name: str):
+async def search_usab(name: str, state: str = None):
     """
-    Search USA Bracketing for athletes by name while authenticated.
-    GET /search/usab?name=Luke+Heinen
+    Search USA Bracketing for athletes by name (and optional state) while authenticated.
+    Fetches /athletes to inspect the real search form, then submits it with
+    first_name / last_name / state fields split from the name parameter.
+    GET /search/usab?name=Luke+Heinen&state=MN
     Returns a JSON array of candidates with uuid, name, city, state, club.
     """
     try:
+        # Split query name into first / last for the form fields
+        parts      = name.strip().split(None, 1)
+        first_name = parts[0] if parts else name
+        last_name  = parts[1] if len(parts) > 1 else ""
+
         results = []
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             await _usab_login(client)
 
-            resp = await client.get(
-                f"{USAB_API_BASE}/athletes",
-                params={"search": name},
-                headers=USAB_HEADERS,
-            )
-            print(f"=== /search/usab: status={resp.status_code} url={resp.url} ===")
+            # ── Step 1: fetch the athletes landing page to discover the form ──
+            landing = await client.get(f"{USAB_API_BASE}/athletes", headers=USAB_HEADERS)
+            print(f"=== /search/usab: landing status={landing.status_code} ===")
 
-            soup = BeautifulSoup(resp.text, "html.parser")
+            landing_soup = BeautifulSoup(landing.text, "html.parser")
+            search_form  = landing_soup.find("form")
+            if search_form:
+                form_action = search_form.get("action") or "/athletes"
+                form_method = (search_form.get("method") or "get").lower()
+                form_fields = {
+                    inp.get("name"): inp.get("value", "")
+                    for inp in search_form.find_all("input")
+                    if inp.get("name")
+                }
+                print(f"=== /search/usab: form action={form_action!r} method={form_method!r} "
+                      f"fields={list(form_fields.keys())} ===")
+            else:
+                form_action = "/athletes"
+                form_method = "get"
+                form_fields = {}
+                print(f"=== /search/usab: no <form> found on landing page ===")
+
+            # Build the full form URL
+            if not form_action.startswith("http"):
+                form_action = USAB_API_BASE.rstrip("/") + "/" + form_action.lstrip("/")
+
+            # Merge hidden/default fields with the search values
+            params = dict(form_fields)
+            params["first_name"] = first_name
+            params["last_name"]  = last_name
+            if state:
+                params["state"] = state
+
+            print(f"=== /search/usab: submitting {form_method.upper()} {form_action} params={params} ===")
+
+            # ── Step 2: submit the search form ────────────────────────────────
+            if form_method == "post":
+                resp = await client.post(form_action, data=params, headers=USAB_HEADERS)
+            else:
+                resp = await client.get(form_action, params=params, headers=USAB_HEADERS)
+
+            print(f"=== /search/usab: search status={resp.status_code} final_url={resp.url} ===")
+            print(f"=== /search/usab: response HTML (first 2000):\n{resp.text[:2000]} ===")
+
+            # ── Step 3: parse athlete cards from the result page ───────────────
+            soup    = BeautifulSoup(resp.text, "html.parser")
             uuid_re = re.compile(
                 r'/athletes/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})',
                 re.IGNORECASE,
             )
+            # Name filter: accept if any query token appears in the candidate name
+            name_tokens = [t.lower() for t in name.split() if len(t) > 1]
             seen = set()
 
             for a in soup.find_all("a", href=True):
@@ -1926,10 +1973,8 @@ async def search_usab(name: str):
                     continue
                 seen.add(uid)
 
-                # Walk up to find the card container
                 card = a.find_parent(["div", "article", "li", "tr"])
 
-                # Name: prefer link text; fall back to nearest heading in card
                 athlete_name = a.get_text(strip=True)
                 if not athlete_name or athlete_name.lower() in ("view", "profile", "details", "more"):
                     if card:
@@ -1938,23 +1983,30 @@ async def search_usab(name: str):
                 if not athlete_name:
                     continue
 
-                # City, state, club: scan span/div/td text tokens in the card
-                city = state = club = ""
+                # Filter: skip candidates whose name shares no token with the query
+                name_lower = athlete_name.lower()
+                if name_tokens and not any(tok in name_lower for tok in name_tokens):
+                    continue
+
+                # Extract city, state, club from card tokens
+                city = cand_state = club = ""
                 if card:
                     tokens = [el.get_text(strip=True) for el in card.find_all(["span", "div", "td", "p"])]
                     for tok in tokens:
                         if re.fullmatch(r'[A-Z]{2}', tok):
-                            state = tok
-                        elif not city and re.match(r'^[A-Za-z\s]+$', tok) and 2 < len(tok) < 40 and tok != athlete_name:
+                            cand_state = tok
+                        elif not city and re.match(r'^[A-Za-z][\w\s]*$', tok) and 2 < len(tok) < 40 \
+                                and tok.lower() not in (athlete_name.lower(), "view", "profile"):
                             city = tok
-                        elif not club and len(tok) > 2 and tok not in (athlete_name, city, state):
+                        elif not club and 2 < len(tok) < 60 \
+                                and tok not in (athlete_name, city, cand_state):
                             club = tok
 
                 results.append({
                     "uuid":  uid,
                     "name":  athlete_name,
                     "city":  city,
-                    "state": state,
+                    "state": cand_state,
                     "club":  club,
                 })
                 if len(results) >= 20:
