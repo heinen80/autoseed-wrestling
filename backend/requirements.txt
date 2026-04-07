@@ -3,6 +3,5 @@ uvicorn
 pandas
 python-multipart
 httpx
-playwright
 beautifulsoup4
 lxml
