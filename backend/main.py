@@ -1403,17 +1403,15 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 if result_re.search(snippet):
                     result_text = BeautifulSoup(snippet, "html.parser").get_text(" ", strip=True)
 
-        # If result_text looks like a truncated mat-number prefix ("MAT 09 -") with
-        # no "over" keyword, search all_text for the full bout line containing both
-        # the opponent name and "over" so W/L direction can be determined correctly.
-        if result_text and not over_re.search(result_text):
-            opp_lower = opp.lower()
-            for seg in re.split(r'[|\n]', all_text):
-                seg_lower = seg.lower()
-                if opp_lower in seg_lower and over_re.search(seg) and result_re.search(seg):
-                    result_text = seg.strip()
-                    break
-
+        # ── result_text: used for method detection ───────────────────────────
+        # ── over_text:  used for W/L direction (must contain "over") ────────
+        #
+        # The DOM walk often lands on a container whose joined text is just
+        # "MAT 09 -" (mat number prefix) — it has a result token if a sibling
+        # row has Dec/TF/MD/Fall, but "over" lives in a different node.
+        # We keep result_text for method, then separately find over_text by
+        # scanning all_text (joined with " | ") for the segment that has both
+        # the opponent name and the word "over".  No result token required.
         rm = result_re.search(result_text)
         if not rm:
             if debug:
@@ -1433,52 +1431,51 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
         else:
             method = "dec"
 
-        # ── Win/loss: split on the LAST " over " in the bout text ───────────
-        # Format: "Winner , Team over Loser , Team ( Method Score )"
-        # Splitting on the last "over" avoids false splits from team names.
-        won        = None
-        wl_method  = "none"
-        over_spans = [(m.start(), m.end()) for m in over_re.finditer(result_text)]
-        if over_spans and wname_last:
-            last_start, last_end = over_spans[-1]
-            before = result_text[:last_start].lower()
-            after  = result_text[last_end:].lower()
+        # Find the bout line that contains "over" for W/L detection.
+        # Use result_text if it already has "over"; otherwise scan all_text.
+        over_text = result_text if over_re.search(result_text) else ""
+        if not over_text and wname_last:
+            opp_lower = opp.lower()
+            for seg in all_text.split(" | "):
+                if opp_lower in seg.lower() and over_re.search(seg):
+                    over_text = seg.strip()
+                    break
 
-            # Check 1: both first and last name in before-half → definite win
-            if wname_last in before and (not wname_first or wname_first in before):
-                won = True
-                wl_method = "both-names-before"
-            # Check 2: both in after-half → definite loss
-            elif wname_last in after and (not wname_first or wname_first in after):
-                won = False
-                wl_method = "both-names-after"
-            # Check 3: last name alone before → win (abbreviated first name)
-            elif wname_last in before:
-                won = True
-                wl_method = "last-name-before"
-            # Check 4: last name alone after → loss
-            elif wname_last in after:
-                won = False
-                wl_method = "last-name-after"
+        # ── Win/loss: split on the LAST " over " in over_text ───────────────
+        # Format: "Winner , Team over Loser , Team ( Method Score )"
+        won       = None
+        wl_method = "none"
+        if over_text and wname_last:
+            over_spans = [(m.start(), m.end()) for m in over_re.finditer(over_text)]
+            if over_spans:
+                last_start, last_end = over_spans[-1]
+                before = over_text[:last_start].lower()
+                after  = over_text[last_end:].lower()
+
+                if wname_last in before and (not wname_first or wname_first in before):
+                    won = True
+                    wl_method = "both-names-before"
+                elif wname_last in after and (not wname_first or wname_first in after):
+                    won = False
+                    wl_method = "both-names-after"
+                elif wname_last in before:
+                    won = True
+                    wl_method = "last-name-before"
+                elif wname_last in after:
+                    won = False
+                    wl_method = "last-name-after"
 
         if won is None:
-            # Fallback: standalone W/L token anywhere in the container
-            wl_m = re.search(r'\b(W(?:in|on)?|L(?:oss|ost)?)\b', result_text)
-            if wl_m:
-                won = wl_m.group(1).upper().startswith("W")
-                wl_method = "wl-token"
+            # No "over" line found anywhere → conservative default: loss
+            won = False
+            wl_method = "no-over-default-loss"
 
         # Per-bout logging: always print first 10 bouts per event
         if bout_log_count < 10:
             bout_log_count += 1
-            over_preview = ""
-            if over_spans and wname_last:
-                s, e = over_spans[-1]
-                over_preview = (f" | before={result_text[:s][:50]!r}"
-                                f" | after={result_text[e:][:50]!r}")
             print(f"=== USAB bout[{bout_log_count}]: opp={opp!r} "
-                  f"result={result_text[:80]!r} "
-                  f"wl_method={wl_method!r} won={won}{over_preview} ===")
+                  f"result={result_text[:60]!r} over={over_text[:80]!r} "
+                  f"wl_method={wl_method!r} won={won} ===")
 
         # ── Date + season filter ──────────────────────────────────────────────
         # Try ISO date in the bout line first; fall back to the event header date.
