@@ -1381,9 +1381,24 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 print(f"=== USAB parser: skipping self-match opp={opp!r} (wrestler={wrestler_name!r}) ===")
                 continue
 
-        # Walk up the DOM (up to 6 levels) to find a container with a result token.
-        # get_text(" ", ...) joins all child text with spaces, reconstructing the
-        # full bout line even when Tailwind splits names/teams into separate nodes.
+        # ── Find the complete bout segment by splitting all_text on "Bout" markers ──
+        # all_text format: "Bout 965 - Cons. Sub-Quarters: | Tae Berry | , SCP over | Luke Heinen | , TELI ( | F 1:29 | )"
+        # Splitting on \bBout\b gives one segment per bout; each preserves both
+        # wrestler names and "over" in the same string, unlike the " | " split.
+        bout_segment = ""
+        opp_lower = opp.lower()
+        for seg in re.split(r'\bBout\b', all_text, flags=re.IGNORECASE):
+            if opp_lower in seg.lower() and over_re.search(seg):
+                bout_segment = seg
+                break
+
+        if not bout_segment:
+            # Opponent link is not associated with a real bout (e.g. related profile)
+            if debug:
+                print(f"=== USAB parser: no bout segment found for opp={opp!r}, skipping ===")
+            continue
+
+        # ── Method: DOM walk for result token, fall back to bout_segment ─────
         container   = a_tag.parent
         result_text = ""
         for _ in range(6):
@@ -1395,27 +1410,10 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 break
             container = container.parent
 
-        if not result_text:
-            # Fallback: raw-HTML snippet centred on the opponent name occurrence
-            idx = html.find(opp)
-            if idx != -1:
-                snippet = html[max(0, idx - 200): idx + 200]
-                if result_re.search(snippet):
-                    result_text = BeautifulSoup(snippet, "html.parser").get_text(" ", strip=True)
-
-        # ── result_text: used for method detection ───────────────────────────
-        # ── over_text:  used for W/L direction (must contain "over") ────────
-        #
-        # The DOM walk often lands on a container whose joined text is just
-        # "MAT 09 -" (mat number prefix) — it has a result token if a sibling
-        # row has Dec/TF/MD/Fall, but "over" lives in a different node.
-        # We keep result_text for method, then separately find over_text by
-        # scanning all_text (joined with " | ") for the segment that has both
-        # the opponent name and the word "over".  No result token required.
-        rm = result_re.search(result_text)
+        rm = result_re.search(result_text) or result_re.search(bout_segment)
         if not rm:
             if debug:
-                print(f"=== USAB parser: no result token near opponent {opp!r}, skipping ===")
+                print(f"=== USAB parser: no result token for opp={opp!r}, skipping ===")
             continue
 
         raw_method = rm.group(1).lower().replace(".", "").replace(" ", "")
@@ -1431,26 +1429,16 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
         else:
             method = "dec"
 
-        # Find the bout line that contains "over" for W/L detection.
-        # Use result_text if it already has "over"; otherwise scan all_text.
-        over_text = result_text if over_re.search(result_text) else ""
-        if not over_text and wname_last:
-            opp_lower = opp.lower()
-            for seg in all_text.split(" | "):
-                if opp_lower in seg.lower() and over_re.search(seg):
-                    over_text = seg.strip()
-                    break
-
-        # ── Win/loss: split on the LAST " over " in over_text ───────────────
+        # ── Win/loss: split bout_segment on the LAST " over " ────────────────
         # Format: "Winner , Team over Loser , Team ( Method Score )"
-        won       = None
-        wl_method = "none"
-        if over_text and wname_last:
-            over_spans = [(m.start(), m.end()) for m in over_re.finditer(over_text)]
+        won       = False
+        wl_method = "no-over-default-loss"
+        if wname_last:
+            over_spans = [(m.start(), m.end()) for m in over_re.finditer(bout_segment)]
             if over_spans:
                 last_start, last_end = over_spans[-1]
-                before = over_text[:last_start].lower()
-                after  = over_text[last_end:].lower()
+                before = bout_segment[:last_start].lower()
+                after  = bout_segment[last_end:].lower()
 
                 if wname_last in before and (not wname_first or wname_first in before):
                     won = True
@@ -1465,16 +1453,11 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                     won = False
                     wl_method = "last-name-after"
 
-        if won is None:
-            # No "over" line found anywhere → conservative default: loss
-            won = False
-            wl_method = "no-over-default-loss"
-
         # Per-bout logging: always print first 10 bouts per event
-        if bout_log_count < 10:
-            bout_log_count += 1
+        bout_log_count += 1
+        if bout_log_count <= 10:
             print(f"=== USAB bout[{bout_log_count}]: opp={opp!r} "
-                  f"result={result_text[:60]!r} over={over_text[:80]!r} "
+                  f"found_line={bout_segment[:120]!r} "
                   f"wl_method={wl_method!r} won={won} ===")
 
         # ── Date + season filter ──────────────────────────────────────────────
