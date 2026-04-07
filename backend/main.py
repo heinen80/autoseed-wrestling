@@ -1357,63 +1357,61 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
     else:
         wname_last = wname_first = ""
 
+    # Pre-build ordered list of bout blocks by splitting all_text on "Bout " (literal).
+    # Each block is the text of one bout: "965 - Cons. Sub-Quarters: | Tae Berry | , SCP over | Luke Heinen | ..."
+    # Using the literal "Bout " (with space) avoids false splits on other words.
+    bout_blocks = re.split(r'Bout\s+', all_text, flags=re.IGNORECASE)
+    # claimed_blocks tracks which blocks have been matched to prevent double-counting
+    # the same bout when an opponent link appears more than once in the HTML.
+    claimed_blocks = set()
+
     matches        = []
-    seen_opps      = set()
     season_pass    = 0
     season_fail    = 0
-    bout_log_count = 0  # log first 10 bouts per event regardless of debug flag
+    bout_log_count = 0
 
-    # Find every link to a different athlete profile — each is one bout
+    # Iterate over every athlete profile link — each unique unclamed bout = one match.
+    # NOTE: seen_opps intentionally removed so the same opponent can appear multiple
+    # times (consolation rematches, true-seconds, etc.) as separate bouts.
     for a_tag in soup.find_all("a", href=True):
         if "/athletes/" not in a_tag["href"]:
             continue
         opp = a_tag.get_text(strip=True)
         if not opp or opp.lower() in ("view", "profile", "details", "more", ""):
             continue
-        opp_key = opp.lower()
-        if opp_key in seen_opps:
-            continue
-        seen_opps.add(opp_key)
 
         # Skip self-matches: wrestler's own profile link appears on their page
+        opp_key = opp.lower()
         if wname_last and wname_last in opp_key:
             if not wname_first or wname_first in opp_key:
                 print(f"=== USAB parser: skipping self-match opp={opp!r} (wrestler={wrestler_name!r}) ===")
                 continue
 
-        # ── Find the complete bout segment by splitting all_text on "Bout" markers ──
-        # all_text format: "Bout 965 - Cons. Sub-Quarters: | Tae Berry | , SCP over | Luke Heinen | , TELI ( | F 1:29 | )"
-        # Splitting on \bBout\b gives one segment per bout; each preserves both
-        # wrestler names and "over" in the same string, unlike the " | " split.
-        bout_segment = ""
-        opp_lower = opp.lower()
-        for seg in re.split(r'\bBout\b', all_text, flags=re.IGNORECASE):
-            if opp_lower in seg.lower() and over_re.search(seg):
-                bout_segment = seg
+        # ── Find the first unclaimed bout block containing this opponent AND "over" ──
+        # Each block is already one complete bout, so both names and "over" are present.
+        # We claim the block so a second href for the same opponent doesn't reuse it.
+        bout_block = ""
+        block_idx  = -1
+        for i, blk in enumerate(bout_blocks):
+            if i in claimed_blocks:
+                continue
+            if opp_key in blk.lower() and over_re.search(blk):
+                bout_block = blk
+                block_idx  = i
                 break
 
-        if not bout_segment:
-            # Opponent link is not associated with a real bout (e.g. related profile)
+        if not bout_block:
             if debug:
-                print(f"=== USAB parser: no bout segment found for opp={opp!r}, skipping ===")
+                print(f"=== USAB parser: no bout block for opp={opp!r}, skipping ===")
             continue
 
-        # ── Method: DOM walk for result token, fall back to bout_segment ─────
-        container   = a_tag.parent
-        result_text = ""
-        for _ in range(6):
-            if container is None:
-                break
-            ct = container.get_text(" ", strip=True)
-            if result_re.search(ct) and len(ct) > len(opp) + 2:
-                result_text = ct
-                break
-            container = container.parent
+        claimed_blocks.add(block_idx)
 
-        rm = result_re.search(result_text) or result_re.search(bout_segment)
+        # ── Method: read from the bout block (no DOM walk needed) ────────────
+        rm = result_re.search(bout_block)
         if not rm:
             if debug:
-                print(f"=== USAB parser: no result token for opp={opp!r}, skipping ===")
+                print(f"=== USAB parser: no result token in bout block for opp={opp!r}, skipping ===")
             continue
 
         raw_method = rm.group(1).lower().replace(".", "").replace(" ", "")
@@ -1429,16 +1427,16 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
         else:
             method = "dec"
 
-        # ── Win/loss: split bout_segment on the LAST " over " ────────────────
+        # ── Win/loss: use the FIRST "over" in the bout block ─────────────────
+        # Each block covers exactly one bout, so the first "over" is the decisive one.
         # Format: "Winner , Team over Loser , Team ( Method Score )"
         won       = False
         wl_method = "no-over-default-loss"
         if wname_last:
-            over_spans = [(m.start(), m.end()) for m in over_re.finditer(bout_segment)]
-            if over_spans:
-                last_start, last_end = over_spans[-1]
-                before = bout_segment[:last_start].lower()
-                after  = bout_segment[last_end:].lower()
+            m_over = over_re.search(bout_block)
+            if m_over:
+                before = bout_block[:m_over.start()].lower()
+                after  = bout_block[m_over.end():].lower()
 
                 if wname_last in before and (not wname_first or wname_first in before):
                     won = True
@@ -1453,12 +1451,10 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                     won = False
                     wl_method = "last-name-after"
 
-        # Per-bout logging: always print first 10 bouts per event
+        # Verification logging: print every bout result
         bout_log_count += 1
-        if bout_log_count <= 10:
-            print(f"=== USAB bout[{bout_log_count}]: opp={opp!r} "
-                  f"found_line={bout_segment[:120]!r} "
-                  f"wl_method={wl_method!r} won={won} ===")
+        print(f"=== USAB bout[{bout_log_count}]: opp={opp!r} won={won} "
+              f"wl_method={wl_method!r} bout_block={bout_block[:140]!r} ===")
 
         # ── Date + season filter ──────────────────────────────────────────────
         # Try ISO date in the bout line first; fall back to the event header date.
