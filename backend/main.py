@@ -1891,6 +1891,82 @@ async def search_athlete(name: str, weight: str = None):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/search/usab")
+async def search_usab(name: str):
+    """
+    Search USA Bracketing for athletes by name while authenticated.
+    GET /search/usab?name=Luke+Heinen
+    Returns a JSON array of candidates with uuid, name, city, state, club.
+    """
+    try:
+        results = []
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            await _usab_login(client)
+
+            resp = await client.get(
+                f"{USAB_API_BASE}/athletes",
+                params={"search": name},
+                headers=USAB_HEADERS,
+            )
+            print(f"=== /search/usab: status={resp.status_code} url={resp.url} ===")
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            uuid_re = re.compile(
+                r'/athletes/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})',
+                re.IGNORECASE,
+            )
+            seen = set()
+
+            for a in soup.find_all("a", href=True):
+                m = uuid_re.search(a["href"])
+                if not m:
+                    continue
+                uid = m.group(1)
+                if uid in seen:
+                    continue
+                seen.add(uid)
+
+                # Walk up to find the card container
+                card = a.find_parent(["div", "article", "li", "tr"])
+
+                # Name: prefer link text; fall back to nearest heading in card
+                athlete_name = a.get_text(strip=True)
+                if not athlete_name or athlete_name.lower() in ("view", "profile", "details", "more"):
+                    if card:
+                        h = card.find(["h1", "h2", "h3", "h4", "strong", "b"])
+                        athlete_name = h.get_text(strip=True) if h else ""
+                if not athlete_name:
+                    continue
+
+                # City, state, club: scan span/div/td text tokens in the card
+                city = state = club = ""
+                if card:
+                    tokens = [el.get_text(strip=True) for el in card.find_all(["span", "div", "td", "p"])]
+                    for tok in tokens:
+                        if re.fullmatch(r'[A-Z]{2}', tok):
+                            state = tok
+                        elif not city and re.match(r'^[A-Za-z\s]+$', tok) and 2 < len(tok) < 40 and tok != athlete_name:
+                            city = tok
+                        elif not club and len(tok) > 2 and tok not in (athlete_name, city, state):
+                            club = tok
+
+                results.append({
+                    "uuid":  uid,
+                    "name":  athlete_name,
+                    "city":  city,
+                    "state": state,
+                    "club":  club,
+                })
+                if len(results) >= 20:
+                    break
+
+        print(f"=== /search/usab: returned {len(results)} results for {name!r} ===")
+        return JSONResponse(results)
+    except Exception as e:
+        import traceback
+        return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
+
+
 @app.post("/scrape/combined")
 async def scrape_combined(request: Request):
     """
