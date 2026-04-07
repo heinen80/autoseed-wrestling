@@ -1365,6 +1365,11 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
     # the same bout when an opponent link appears more than once in the HTML.
     claimed_blocks = set()
 
+    # Count all athlete hrefs up front for diagnostics
+    all_athlete_hrefs = [a for a in soup.find_all("a", href=True) if "/athletes/" in a["href"]]
+    print(f"=== USAB parser: event={event_name!r} bout_blocks={len(bout_blocks)} "
+          f"athlete_hrefs={len(all_athlete_hrefs)} ===")
+
     matches        = []
     season_pass    = 0
     season_fail    = 0
@@ -1401,8 +1406,25 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 break
 
         if not bout_block:
-            if debug:
-                print(f"=== USAB parser: no bout block for opp={opp!r}, skipping ===")
+            # Diagnostic: show exactly what the link text is and where the name
+            # appears (if at all) in the raw all_text to reveal format mismatches.
+            all_text_lower = all_text.lower()
+            idx = all_text_lower.find(opp_key)
+            if idx != -1:
+                ctx = all_text[max(0, idx - 60): idx + 120]
+                print(f"=== USAB parser: no bout block for opp={opp!r} "
+                      f"(link_text={opp!r}) but found in all_text: {ctx!r} ===")
+            else:
+                # Try each word of the name individually
+                words = opp_key.split()
+                word_hits = {w: all_text_lower.find(w) for w in words if len(w) > 2}
+                print(f"=== USAB parser: opp={opp!r} NOT in all_text at all; "
+                      f"word hits={word_hits} ===")
+            # Also print every bout block that contains any word of the opponent name
+            for i, blk in enumerate(bout_blocks):
+                blk_lower = blk.lower()
+                if any(w in blk_lower for w in opp_key.split() if len(w) > 2):
+                    print(f"=== USAB parser: partial-match block[{i}]={blk[:200]!r} ===")
             continue
 
         claimed_blocks.add(block_idx)
