@@ -1459,7 +1459,7 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
         # ── Date + season filter ──────────────────────────────────────────────
         # Try ISO date in the bout line first; fall back to the event header date.
         match_date = None
-        dm = re.search(r'\b(\d{4}-\d{2}-\d{2})\b', result_text)
+        dm = re.search(r'\b(\d{4}-\d{2}-\d{2})\b', bout_block)
         if dm:
             try:
                 match_date = datetime.strptime(dm.group(1), "%Y-%m-%d")
@@ -1467,7 +1467,7 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 pass
         if match_date is None:
             # Also try MM/DD/YYYY in the bout line
-            dm2 = re.search(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', result_text)
+            dm2 = re.search(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', bout_block)
             if dm2:
                 try:
                     match_date = datetime.strptime(dm2.group(1), "%m/%d/%Y")
