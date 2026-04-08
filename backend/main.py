@@ -1345,8 +1345,11 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
         print(f"=== USAB _parse_usab_matches_html DEBUG athlete hrefs: {athlete_links} ===")
 
     result_re = re.compile(
-        r'\b(Dec|TF|MD|Fall|Forfeit|For\.?|Inj\.?\s*Def\.?)\b'
-        r'(?:\s+(\d{1,3}[-–]\d{1,3}))?',
+        # Method token: Dec / TF / MD / Fall (full word) / Forfeit / For. / Inj. Def.
+        # Also bare "F" (fall by pin, score is a time like "1:50" or "0:51").
+        r'\b(Dec|TF|MD|Fall|Forfeit|For\.?|Inj\.?\s*Def\.?|F)\b'
+        # Optional score: "11-3" style decision score OR "1:50" style fall time.
+        r'(?:\s+(\d{1,3}[-\u2013]\d{1,3}|\d{1,2}:\d{2}))?',
         re.IGNORECASE,
     )
     over_re = re.compile(r'\bover\b', re.IGNORECASE)
@@ -1427,7 +1430,12 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
             if idx != -1:
                 ctx = all_text[max(0, idx - 120): idx + 200]
                 if over_re.search(ctx):
-                    print(f"=== USAB parser: using all_text fallback for opp={opp!r}: {ctx[:160]!r} ===")
+                    # Extend right until a result token is visible (captures the
+                    # "( F 1:50 )" that may sit past the initial 200-char window).
+                    if not result_re.search(ctx):
+                        ctx = all_text[max(0, idx - 120): idx + 500]
+                    print(f"=== USAB parser: using all_text fallback for opp={opp!r} "
+                          f"has_result={bool(result_re.search(ctx))}: {ctx[:180]!r} ===")
                     bout_block = ctx
                     # block_idx stays -1; claimed_blocks.add(-1) is harmless
                 else:
@@ -1451,7 +1459,7 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
 
         raw_method = rm.group(1).lower().replace(".", "").replace(" ", "")
         score      = rm.group(2) or None
-        if "fall" in raw_method:
+        if "fall" in raw_method or raw_method == "f":
             method = "fall"
         elif raw_method == "tf":
             method = "tf"
@@ -1793,31 +1801,40 @@ async def fetch_usab_profile(wrestler_id, season=None):
                 print(f"=== USAB fetch_usab_profile: event UUIDs from wire:click: {event_uuids} ===")
 
                 # Build UUID -> event date map from the profile page HTML.
-                # Dates appear near the showResults button as:
-                #   "02/15/2026"  (single day)  or
-                #   "03/06 - 03/07/2026"  (range — use end date)
+                # Each event row has: date text, event name, then the UUID in
+                # wire:click="showResults('UUID')".  The date always appears
+                # BEFORE the UUID in the HTML, so we search only the text that
+                # precedes each UUID and take the LAST (closest) date found.
+                # Formats:
+                #   "02/15/2026"         single day
+                #   "03/06 - 03/07/2026" range — use the end date
                 profile_text = profile_resp.text
                 event_date_map = {}
                 for uuid in event_uuids:
                     idx = profile_text.find(uuid)
                     if idx == -1:
                         continue
-                    snippet = profile_text[max(0, idx - 400): idx + 400]
-                    # Range: "MM/DD - MM/DD/YYYY" or "MM/DD – MM/DD/YYYY"
-                    rm = re.search(
-                        r'\d{1,2}/\d{1,2}\s*[-\u2013]\s*(\d{1,2}/\d{1,2}/\d{4})\b', snippet
-                    )
-                    if rm:
+                    # Look only at the 600 chars immediately before the UUID
+                    before = profile_text[max(0, idx - 600): idx]
+                    # Try range first (take end date); find the LAST occurrence
+                    range_hits = list(re.finditer(
+                        r'\d{1,2}/\d{1,2}\s*[-\u2013]\s*(\d{1,2}/\d{1,2}/\d{4})\b', before
+                    ))
+                    if range_hits:
                         try:
-                            event_date_map[uuid] = datetime.strptime(rm.group(1), "%m/%d/%Y")
+                            event_date_map[uuid] = datetime.strptime(
+                                range_hits[-1].group(1), "%m/%d/%Y"
+                            )
                             continue
                         except ValueError:
                             pass
-                    # Single date: "MM/DD/YYYY"
-                    sm = re.search(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', snippet)
-                    if sm:
+                    # Single date — take the LAST occurrence before the UUID
+                    single_hits = list(re.finditer(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', before))
+                    if single_hits:
                         try:
-                            event_date_map[uuid] = datetime.strptime(sm.group(1), "%m/%d/%Y")
+                            event_date_map[uuid] = datetime.strptime(
+                                single_hits[-1].group(1), "%m/%d/%Y"
+                            )
                         except ValueError:
                             pass
                 print(f"=== USAB fetch_usab_profile: event_date_map={event_date_map} ===")
