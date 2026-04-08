@@ -1302,7 +1302,7 @@ async def _usab_login(client):
 
 
 def _parse_usab_matches_html(html, event_name, season_start, season_end,
-                             wrestler_name=None, debug=False):
+                             wrestler_name=None, debug=False, event_date=None):
     """
     Parse bout results from a USAB Livewire HTML fragment.
 
@@ -1310,19 +1310,30 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
     Win/loss is determined by splitting on the last " over " in the bout line
     and checking whether wrestler_name appears before (win) or after (loss).
 
+    event_date: if supplied by the caller (parsed from the profile page), it
+                takes priority over any date found inside the HTML fragment.
+
     Returns a list of match dicts compatible with merge_season_matches.
     """
     soup = BeautifulSoup(html, "html.parser")
 
-    # ── Extract event date from the header (MM/DD/YYYY or MM/DD - MM/DD/YYYY) ──
-    # Find all full dates in the HTML; use the first one as the event date.
-    event_date = None
-    for dm in re.finditer(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', html):
-        try:
-            event_date = datetime.strptime(dm.group(1), "%m/%d/%Y")
-            break
-        except ValueError:
-            pass
+    # ── Event date: use caller-supplied date if available; otherwise scan the
+    # HTML fragment for MM/DD/YYYY patterns (range: use the end date). ──────
+    if event_date is None:
+        # Try "MM/DD - MM/DD/YYYY" range first (use end date)
+        rm = re.search(r'\d{1,2}/\d{1,2}\s*[-]\s*(\d{1,2}/\d{1,2}/\d{4})\b', html)
+        if rm:
+            try:
+                event_date = datetime.strptime(rm.group(1), "%m/%d/%Y")
+            except ValueError:
+                pass
+        if event_date is None:
+            for dm in re.finditer(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', html):
+                try:
+                    event_date = datetime.strptime(dm.group(1), "%m/%d/%Y")
+                    break
+                except ValueError:
+                    pass
     print(f"=== USAB _parse_usab_matches_html: event={event_name!r} event_date={event_date} ===")
 
     # Join all visible text with " | " — used both for debug and as fallback
@@ -1406,26 +1417,28 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 break
 
         if not bout_block:
-            # Diagnostic: show exactly what the link text is and where the name
-            # appears (if at all) in the raw all_text to reveal format mismatches.
+            # The opponent name may straddle " | " separators in bout_blocks
+            # (e.g. "Van | Hobby" in all_text becomes unsearchable as "van hobby").
+            # Fall back: find the opponent name in the raw all_text, widen the
+            # context to include the surrounding bout line, and use it if "over"
+            # is present — same W/L pattern applies.
             all_text_lower = all_text.lower()
             idx = all_text_lower.find(opp_key)
             if idx != -1:
-                ctx = all_text[max(0, idx - 60): idx + 120]
-                print(f"=== USAB parser: no bout block for opp={opp!r} "
-                      f"(link_text={opp!r}) but found in all_text: {ctx!r} ===")
+                ctx = all_text[max(0, idx - 120): idx + 200]
+                if over_re.search(ctx):
+                    print(f"=== USAB parser: using all_text fallback for opp={opp!r}: {ctx[:160]!r} ===")
+                    bout_block = ctx
+                    # block_idx stays -1; claimed_blocks.add(-1) is harmless
+                else:
+                    print(f"=== USAB parser: opp={opp!r} in all_text but no 'over' nearby, skipping. "
+                          f"ctx={ctx[:120]!r} ===")
+                    continue
             else:
-                # Try each word of the name individually
                 words = opp_key.split()
                 word_hits = {w: all_text_lower.find(w) for w in words if len(w) > 2}
-                print(f"=== USAB parser: opp={opp!r} NOT in all_text at all; "
-                      f"word hits={word_hits} ===")
-            # Also print every bout block that contains any word of the opponent name
-            for i, blk in enumerate(bout_blocks):
-                blk_lower = blk.lower()
-                if any(w in blk_lower for w in opp_key.split() if len(w) > 2):
-                    print(f"=== USAB parser: partial-match block[{i}]={blk[:200]!r} ===")
-            continue
+                print(f"=== USAB parser: opp={opp!r} NOT in all_text; word_hits={word_hits} ===")
+                continue
 
         claimed_blocks.add(block_idx)
 
@@ -1779,6 +1792,36 @@ async def fetch_usab_profile(wrestler_id, season=None):
                 )))
                 print(f"=== USAB fetch_usab_profile: event UUIDs from wire:click: {event_uuids} ===")
 
+                # Build UUID -> event date map from the profile page HTML.
+                # Dates appear near the showResults button as:
+                #   "02/15/2026"  (single day)  or
+                #   "03/06 - 03/07/2026"  (range — use end date)
+                profile_text = profile_resp.text
+                event_date_map = {}
+                for uuid in event_uuids:
+                    idx = profile_text.find(uuid)
+                    if idx == -1:
+                        continue
+                    snippet = profile_text[max(0, idx - 400): idx + 400]
+                    # Range: "MM/DD - MM/DD/YYYY" or "MM/DD – MM/DD/YYYY"
+                    rm = re.search(
+                        r'\d{1,2}/\d{1,2}\s*[-\u2013]\s*(\d{1,2}/\d{1,2}/\d{4})\b', snippet
+                    )
+                    if rm:
+                        try:
+                            event_date_map[uuid] = datetime.strptime(rm.group(1), "%m/%d/%Y")
+                            continue
+                        except ValueError:
+                            pass
+                    # Single date: "MM/DD/YYYY"
+                    sm = re.search(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', snippet)
+                    if sm:
+                        try:
+                            event_date_map[uuid] = datetime.strptime(sm.group(1), "%m/%d/%Y")
+                        except ValueError:
+                            pass
+                print(f"=== USAB fetch_usab_profile: event_date_map={event_date_map} ===")
+
                 # Get CSRF token for Livewire AJAX requests
                 meta_csrf  = soup.find("meta", attrs={"name": "csrf-token"})
                 csrf_token = meta_csrf["content"] if meta_csrf else ""
@@ -1832,6 +1875,7 @@ async def fetch_usab_profile(wrestler_id, season=None):
                         event_matches = _parse_usab_matches_html(
                             html_frag, event_uuid, season_start, season_end,
                             wrestler_name=wrestler_name, debug=is_first,
+                            event_date=event_date_map.get(event_uuid),
                         )
                         print(f"=== USAB Livewire event={event_uuid} parsed {len(event_matches)} matches ===")
                         matches.extend(event_matches)
@@ -2116,19 +2160,13 @@ async def scrape_combined(request: Request):
             print(f"=== scrape_combined: {name!r} USAB season filter: "
                   f"pass={usab_passed} fail={usab_filtered} no_date={len(usab_matches)-usab_passed} ===")
 
-            merged = merge_season_matches(flo_matches, usab_matches)
+            # No dedup: Flo and USAB run exclusive tournaments, so there are no
+            # real cross-platform duplicates. Dedup was dropping valid matches.
+            merged = (
+                [dict(m, source="flo")  for m in flo_matches] +
+                [dict(m, source="usab") for m in usab_matches]
+            )
             print(f"=== scrape_combined: {name!r} flo={len(flo_matches)} usab={len(usab_matches)} merged={len(merged)} ===")
-            # Dedup merged by (tournament, opponent) as a safety net
-            seen_keys = set()
-            deduped   = []
-            for m in merged:
-                key = (_norm_tournament(m.get("tournament", "")), _norm_name(m.get("opponent", "")))
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    deduped.append(m)
-            if len(deduped) < len(merged):
-                print(f"=== scrape_combined: {name!r} dedup removed {len(merged) - len(deduped)} duplicates ===")
-            merged = deduped
 
             # Normalize every match: guarantee all required fields have usable defaults
             clean = []
