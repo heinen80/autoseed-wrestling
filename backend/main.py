@@ -2319,6 +2319,8 @@ async def scrape_combined(request: Request):
             print(f"=== scrape_combined: {name!r} USAB season filter: "
                   f"pass={usab_passed} fail={usab_filtered} no_date={len(usab_matches)-usab_passed} ===")
 
+            flo_date_strings = [m.get('date', '') for m in flo_matches]
+            print(f"=== DEDUP {name}: raw flo date strings={flo_date_strings[:10]} ===")
             flo_dates = set()
             for m in flo_matches:
                 try:
@@ -2326,11 +2328,12 @@ async def scrape_combined(request: Request):
                     flo_dates.add(d)
                 except:
                     pass
-            print(f"=== DEDUP: flo_dates for {name}: {sorted(str(d) for d in flo_dates)} ===")
+            print(f"=== DEDUP {name}: flo_dates={sorted(str(d) for d in flo_dates)} ===")
             filtered_usab = []
             for m in usab_matches:
                 try:
                     d = datetime.strptime(m['date'], '%b %d, %Y').date()
+                    print(f"=== DEDUP {name}: checking usab match opp={m.get('opponent')} date_str={m.get('date')} parsed={d} in_flo={d in flo_dates} ===")
                     if d in flo_dates:
                         note = f"{name}: dropped USAB match vs {m.get('opponent')} on {m['date']} — date covered by Flo data"
                         dedup_notes.append(note)
@@ -2338,6 +2341,7 @@ async def scrape_combined(request: Request):
                     else:
                         filtered_usab.append(m)
                 except:
+                    print(f"=== DEDUP {name}: checking usab match opp={m.get('opponent')} date_str={m.get('date')} parsed=FAILED in_flo=N/A ===")
                     filtered_usab.append(m)
             usab_before = len(usab_matches)
             usab_matches = filtered_usab
