@@ -1072,6 +1072,27 @@
         </div>
 
         <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">ROSTER CSV IMPORT</div>
+          <div style="font-size:12px;color:var(--muted2);margin-bottom:10px;line-height:1.6;">
+            Upload a CSV with columns: <code style="color:var(--gold);">name, weight</code> (optional: <code style="color:var(--muted2);">flo_id, usab_uuid</code>). Preview matched profiles before importing.
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="file" id="roster-file-input" accept=".csv" style="display:none;" onchange="uploadRoster()">
+            <button class="btn btn-ghost" onclick="document.getElementById('roster-file-input').click()">Upload Roster CSV</button>
+            <span id="roster-filename" style="font-size:12px;color:var(--muted);"></span>
+          </div>
+          <div id="roster-preview" style="display:none;margin-top:14px;">
+            <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+              <span style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;">Preview</span>
+              <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;" onclick="rosterConfirmAll()">Confirm All</button>
+              <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px;" onclick="rosterSkipAll()">Skip All</button>
+              <button class="btn btn-primary" style="padding:4px 12px;font-size:11px;" onclick="rosterImport()">Import Confirmed</button>
+            </div>
+            <div id="roster-table"></div>
+          </div>
+        </div>
+
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
           <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">SEARCH WRESTLER</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <input type="text" id="si-search-name" class="vote-input" style="flex:1;min-width:180px;" placeholder="Wrestler name (e.g. Luke Heinen)" onkeydown="if(event.key==='Enter')searchAthlete()">
@@ -2623,6 +2644,120 @@ async function searchAthlete() {
     resultsEl.innerHTML = '<span style="color:var(--red);">Connection error: ' + e.message + '</span>';
   }
 }
+
+// ── ROSTER CSV IMPORT ────────────────────────────────────────────────────────
+
+let rosterRows = [];   // preview rows returned from /scrape/roster
+let rosterConfirmed = {};   // row_index -> true/false
+
+async function uploadRoster() {
+  const inp = document.getElementById('roster-file-input');
+  const file = inp.files[0];
+  if (!file) return;
+  document.getElementById('roster-filename').textContent = file.name;
+
+  const fd = new FormData();
+  fd.append('file', file);
+  toast('Matching roster to FloWrestling profiles...');
+
+  try {
+    const res = await fetch(BACKEND + '/scrape/roster', { method: 'POST', body: fd });
+    const json = await res.json();
+    if (json.error) { toast('Roster error: ' + json.error); return; }
+
+    rosterRows = json.wrestlers || [];
+    rosterConfirmed = {};
+    rosterRows.forEach(function(w) {
+      rosterConfirmed[w.row_index] = w.status === 'matched' || w.status === 'flo_id_provided';
+    });
+
+    renderRosterPreview();
+    document.getElementById('roster-preview').style.display = 'block';
+    toast('Roster preview ready — ' + rosterRows.length + ' wrestlers');
+  } catch(e) {
+    toast('Roster upload failed: ' + e.message);
+  }
+}
+
+function renderRosterPreview() {
+  const el = document.getElementById('roster-table');
+  if (!rosterRows.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;">No wrestlers found in CSV.</div>'; return; }
+
+  el.innerHTML = rosterRows.map(function(w) {
+    const confirmed = rosterConfirmed[w.row_index];
+    const floLabel  = w.flo_id
+      ? '<span style="color:var(--gold);">' + (w.flo_name || w.flo_id) + '</span>'
+        + (w.flo_location ? ' <span style="color:var(--muted);font-size:11px;">(' + w.flo_location + ')</span>' : '')
+      : '<span style="color:var(--muted);font-style:italic;">No Flo match</span>';
+    const usabLabel = w.usab_id
+      ? '<span style="color:var(--green);">USAB: ' + w.usab_id.slice(0,8) + '...</span>'
+      : '<span style="color:var(--muted);font-size:11px;">No USAB</span>';
+    const toggleColor = confirmed ? 'var(--green)' : 'var(--muted)';
+    const toggleText  = confirmed ? 'Confirmed' : 'Skip';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border2);flex-wrap:wrap;">'
+      + '<div style="min-width:130px;font-size:13px;">' + w.name + ' <span style="color:var(--muted);font-size:11px;">(' + (w.weight || '?') + ')</span></div>'
+      + '<div style="flex:1;font-size:12px;">' + floLabel + '</div>'
+      + '<div style="font-size:11px;">' + usabLabel + '</div>'
+      + '<button onclick="rosterToggle(' + w.row_index + ')" style="padding:3px 10px;font-size:11px;border:1px solid ' + toggleColor + ';background:transparent;color:' + toggleColor + ';border-radius:4px;cursor:pointer;">' + toggleText + '</button>'
+      + '</div>';
+  }).join('');
+}
+
+function rosterToggle(idx) {
+  rosterConfirmed[idx] = !rosterConfirmed[idx];
+  renderRosterPreview();
+}
+
+function rosterConfirmAll() {
+  rosterRows.forEach(function(w) { rosterConfirmed[w.row_index] = true; });
+  renderRosterPreview();
+}
+
+function rosterSkipAll() {
+  rosterRows.forEach(function(w) { rosterConfirmed[w.row_index] = false; });
+  renderRosterPreview();
+}
+
+async function rosterImport() {
+  const season = document.getElementById('si-season').value;
+  const confirmed = rosterRows.filter(function(w) { return rosterConfirmed[w.row_index]; });
+  if (!confirmed.length) { toast('No wrestlers confirmed'); return; }
+
+  const weight = confirmed[0].weight || document.getElementById('si-weight').value.trim() || '';
+  if (!weight) { toast('Set a weight class before importing'); return; }
+
+  siLog('Starting roster import for ' + confirmed.length + ' wrestler(s)...', 'info');
+  toast('Importing roster...');
+
+  const wrestlers = confirmed.map(function(w) {
+    return { name: w.name, weight: w.weight || weight, flo_id: w.flo_id || null, usab_id: w.usab_id || null };
+  });
+
+  try {
+    const res = await fetch(BACKEND + '/scrape/combined', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wrestlers: wrestlers, season: season }),
+    });
+    const result = await res.json();
+    if (result.error) { siLog('Error: ' + result.error, 'err'); toast('Import error'); return; }
+
+    Object.keys(result).forEach(function(w) {
+      const wd = result[w];
+      if (!wd || !wd.seeds) return;
+      siLog('Weight ' + w + ': ' + wd.seeds.length + ' wrestlers seeded', 'ok');
+    });
+
+    data = result;
+    onDataLoaded();
+    toast('Roster import complete');
+  } catch(e) {
+    siLog('Connection error: ' + e.message, 'err');
+    toast('Import failed');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function importCombined() {
   if (!siWrestlers.length) {

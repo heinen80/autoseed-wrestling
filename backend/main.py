@@ -2245,6 +2245,92 @@ async def search_usab(name: str, state: str = None):
         return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
 
 
+@app.post("/scrape/roster")
+async def scrape_roster(file: UploadFile = File(...)):
+    """
+    Preview endpoint for roster CSV import.
+
+    Accepts a CSV file with columns:
+        name, weight  (required)
+        flo_id        (optional — skip Flo search if supplied)
+        usab_uuid     (optional — used directly if supplied)
+
+    For each row, searches FloWrestling by name (unless flo_id is given) and
+    returns the top candidate. The TD reviews and confirms before full import.
+
+    Returns:
+        { "wrestlers": [ {name, weight, flo_id, flo_name, flo_location,
+                          usab_id, row_index, status}, ... ] }
+    """
+    import csv, io
+    try:
+        content = await file.read()
+        text    = content.decode("utf-8-sig")   # strip BOM if present
+        reader  = csv.DictReader(io.StringIO(text))
+
+        # Normalise header names: strip whitespace, lowercase
+        rows = []
+        for row in reader:
+            rows.append({k.strip().lower(): (v or "").strip() for k, v in row.items()})
+
+        if not rows:
+            return JSONResponse({"error": "CSV file is empty or has no data rows"}, status_code=400)
+
+        required = {"name", "weight"}
+        missing  = required - set(rows[0].keys())
+        if missing:
+            return JSONResponse(
+                {"error": f"CSV missing required columns: {', '.join(sorted(missing))}"},
+                status_code=400,
+            )
+
+        wrestlers = []
+        for i, row in enumerate(rows):
+            name      = row.get("name", "").strip()
+            weight    = row.get("weight", "").strip()
+            flo_id    = row.get("flo_id", "").strip() or None
+            usab_id   = row.get("usab_uuid", "").strip() or row.get("usab_id", "").strip() or None
+
+            if not name:
+                continue
+
+            entry = {
+                "row_index":    i,
+                "name":         name,
+                "weight":       weight,
+                "flo_id":       flo_id,
+                "flo_name":     None,
+                "flo_location": None,
+                "usab_id":      usab_id,
+                "status":       "matched" if flo_id else "searching",
+            }
+
+            if not flo_id:
+                try:
+                    hits = await search_flo_athlete(name, weight)
+                    if hits and not isinstance(hits, Exception) and hits[0].get("id"):
+                        top = hits[0]
+                        entry["flo_id"]       = top["id"]
+                        entry["flo_name"]     = top.get("name")
+                        entry["flo_location"] = top.get("location")
+                        entry["status"]       = "matched"
+                    else:
+                        entry["status"] = "no_flo_match"
+                except Exception as e:
+                    entry["status"] = f"error: {e}"
+            else:
+                entry["status"] = "flo_id_provided"
+
+            wrestlers.append(entry)
+            print(f"=== roster preview: {name!r} -> flo_id={entry['flo_id']!r} status={entry['status']!r} ===")
+
+        return JSONResponse({"wrestlers": wrestlers})
+
+    except Exception as e:
+        import traceback
+        return JSONResponse({"error": str(e), "trace": traceback.format_exc()}, status_code=500)
+
+
 @app.post("/scrape/combined")
 async def scrape_combined(request: Request):
     """
