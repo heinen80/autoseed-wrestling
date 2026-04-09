@@ -1435,6 +1435,14 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                     # "( F 1:50 )" that may sit past the initial 200-char window).
                     if not result_re.search(ctx):
                         ctx = all_text[max(0, idx - 120): idx + 500]
+                    # Trim the snippet so it starts no more than 80 chars before
+                    # the opponent name. This prevents a prior bout's "over"
+                    # (e.g. "Luke Heinen over Jax Gerstner" appearing before
+                    # "Jhett Stucky over Luke Heinen" in the same snippet) from
+                    # being the first "over" found during W/L detection.
+                    opp_in_ctx = ctx.lower().find(opp_key)
+                    if opp_in_ctx > 80:
+                        ctx = ctx[opp_in_ctx - 80:]
                     print(f"=== USAB parser: using all_text fallback for opp={opp!r} "
                           f"has_result={bool(result_re.search(ctx))}: {ctx[:180]!r} ===")
                     bout_block = ctx
