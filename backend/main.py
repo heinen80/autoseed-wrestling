@@ -1919,17 +1919,35 @@ async def fetch_usab_profile(wrestler_id, season=None):
                             print(f"=== USAB Livewire first-event effects.html (first 3000):\n{html_frag[:3000]} ===")
 
                         ev_date = event_date_map.get(event_uuid)
+
+                        # Fix 1: skip entire event if its date is outside the
+                        # season window.  A None ev_date means we couldn't parse
+                        # the date — include it rather than silently drop it.
+                        if ev_date is not None:
+                            if not (season_start <= ev_date <= season_end):
+                                print(f"=== USAB skip event={event_uuid} "
+                                      f"ev_date={ev_date.date()} outside season "
+                                      f"{season_start.date()}–{season_end.date()} ===")
+                                continue
+
                         event_matches = _parse_usab_matches_html(
                             html_frag, event_uuid, season_start, season_end,
                             wrestler_name=wrestler_name, debug=is_first,
                             event_date=ev_date,
                         )
-                        # Tag each match with its event UUID and the date we parsed
-                        # from the profile page so the debug endpoint can show them.
+                        # Fix 2: overwrite each match's date with the event date
+                        # from event_date_map so all matches in an event share the
+                        # same correct date (individual per-bout date parsing can
+                        # pick up wrong dates from the fragment HTML).
+                        date_str = ev_date.strftime("%b %d, %Y") if ev_date else None
                         for m in event_matches:
-                            m["event_uuid"]       = event_uuid
-                            m["raw_date_parsed"]  = ev_date.strftime("%Y-%m-%d") if ev_date else None
-                        print(f"=== USAB Livewire event={event_uuid} parsed {len(event_matches)} matches ===")
+                            m["event_uuid"]      = event_uuid
+                            m["raw_date_parsed"] = ev_date.strftime("%Y-%m-%d") if ev_date else None
+                            if date_str:
+                                m["date"] = date_str
+                        print(f"=== USAB Livewire event={event_uuid} "
+                              f"ev_date={ev_date.date() if ev_date else None} "
+                              f"parsed {len(event_matches)} matches ===")
                         matches.extend(event_matches)
                     except Exception as lw_err:
                         print(f"=== USAB Livewire error for event {event_uuid}: {lw_err} ===")
