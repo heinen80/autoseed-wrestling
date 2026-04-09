@@ -2311,44 +2311,36 @@ async def scrape_combined(request: Request):
             print(f"=== scrape_combined: {name!r} USAB season filter: "
                   f"pass={usab_passed} fail={usab_filtered} no_date={len(usab_matches)-usab_passed} ===")
 
-            # ── Cross-platform date dedup (runs in scrape_combined for every wrestler) ──
-            # Drop any USAB match whose date is already covered by a Flo match.
-            # Both sides parsed to datetime.date via module-level _parse_match_date.
-            flo_date_objs = set()
+            flo_dates = set()
             for m in flo_matches:
-                d = _parse_match_date(m.get("date"))
-                if d:
-                    flo_date_objs.add(d)
-
-            print(f"=== scrape_combined DATE DEDUP [{name!r}]: "
-                  f"flo_dates={sorted(str(d) for d in flo_date_objs)} "
-                  f"usab_total={len(usab_matches)} ===")
-
-            usab_kept    = []
-            dedup_dropped = 0
+                try:
+                    d = datetime.strptime(m['date'], '%b %d, %Y').date()
+                    flo_dates.add(d)
+                except:
+                    pass
+            print(f"=== DEDUP: flo_dates for {name}: {sorted(str(d) for d in flo_dates)} ===")
+            filtered_usab = []
             for m in usab_matches:
-                raw = m.get("date")
-                ud  = _parse_match_date(raw)
-                if ud and ud in flo_date_objs:
-                    note = (f"{name}: dropped USAB match vs {m.get('opponent')} "
-                            f"on {raw} — date covered by Flo data")
-                    dedup_notes.append(note)
-                    dedup_dropped += 1
-                    print(f"=== scrape_combined: date dedup DROP: {note} ===")
-                else:
-                    usab_kept.append(m)
-
-            print(f"=== scrape_combined DATE DEDUP [{name!r}]: "
-                  f"dropped={dedup_dropped} kept={len(usab_kept)} "
-                  f"(of {len(usab_matches)} usab matches) ===")
+                try:
+                    d = datetime.strptime(m['date'], '%b %d, %Y').date()
+                    if d in flo_dates:
+                        note = f"{name}: dropped USAB match vs {m.get('opponent')} on {m['date']} — date covered by Flo data"
+                        dedup_notes.append(note)
+                        print(f"=== DEDUP: dropping usab match {m['opponent']} on {d} - covered by Flo ===")
+                    else:
+                        filtered_usab.append(m)
+                except:
+                    filtered_usab.append(m)
+            usab_before = len(usab_matches)
+            usab_matches = filtered_usab
+            print(f"=== DEDUP: {name}: dropped={usab_before - len(usab_matches)} kept={len(usab_matches)} ===")
 
             merged = (
                 [dict(m, source="flo")  for m in flo_matches] +
-                [dict(m, source="usab") for m in usab_kept]
+                [dict(m, source="usab") for m in usab_matches]
             )
             print(f"=== scrape_combined: {name!r} flo={len(flo_matches)} "
-                  f"usab_raw={len(usab_matches)} usab_after_dedup={len(usab_kept)} "
-                  f"merged={len(merged)} ===")
+                  f"usab_after_dedup={len(usab_matches)} merged={len(merged)} ===")
 
             # Normalize every match: guarantee all required fields have usable defaults
             clean = []

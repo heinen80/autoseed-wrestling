@@ -1937,7 +1937,7 @@ function onDataLoaded() {
   }
 
   // Stats
-  const totalWrestlers = Object.values(data).reduce((a, v) => a + v.seeds.length, 0);
+  const totalWrestlers = Object.values(data).reduce((a, v) => a + (v?.seeds?.length || 0), 0);
   document.getElementById('stat-weights').textContent = Object.keys(data).length;
   document.getElementById('stat-wrestlers').textContent = totalWrestlers;
   document.getElementById('stat-locked').textContent = '0';
@@ -2668,6 +2668,7 @@ async function importCombined() {
 
     Object.keys(result).forEach(function(w) {
       const wd = result[w];
+      if (!wd || !wd.seeds) return; // skip non-weight keys like dedup_notes
       siLog('Weight ' + w + ': ' + wd.seeds.length + ' wrestlers seeded, ' + (wd.matches_processed || 0) + ' H2H matches', 'ok');
       if (wd.controversy_flags && wd.controversy_flags.length) {
         wd.controversy_flags.forEach(function(f) { siLog('Flag: ' + f, 'warn'); });
