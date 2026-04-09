@@ -2661,7 +2661,7 @@ async function uploadRoster() {
   toast('Matching roster to FloWrestling profiles...');
 
   try {
-    const res = await fetch(BACKEND + '/scrape/roster', { method: 'POST', body: fd });
+    const res = await fetch(API + '/scrape/roster', { method: 'POST', body: fd });
     const json = await res.json();
     if (json.error) { toast('Roster error: ' + json.error); return; }
 
@@ -2734,7 +2734,7 @@ async function rosterImport() {
   });
 
   try {
-    const res = await fetch(BACKEND + '/scrape/combined', {
+    const res = await fetch(API + '/scrape/combined', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ wrestlers: wrestlers, season: season }),
