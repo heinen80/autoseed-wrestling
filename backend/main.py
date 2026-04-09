@@ -2279,13 +2279,35 @@ async def scrape_combined(request: Request):
             print(f"=== scrape_combined: {name!r} USAB season filter: "
                   f"pass={usab_passed} fail={usab_filtered} no_date={len(usab_matches)-usab_passed} ===")
 
-            # No dedup: Flo and USAB run exclusive tournaments, so there are no
-            # real cross-platform duplicates. Dedup was dropping valid matches.
+            # Tournament-level cross-platform dedup: if the same tournament
+            # appears on both Flo and USAB, keep only the Flo copy and drop
+            # all USAB matches from that tournament (Flo data is more accurate).
+            # Matching is done on normalised tournament names (lowercase, no
+            # punctuation, no year) — _norm_tournament handles this.
+            flo_tourns = {_norm_tournament(m.get("tournament", "")) for m in flo_matches}
+            flo_tourns.discard("")
+
+            usab_kept    = []
+            usab_dropped = {}   # norm_name -> count of matches dropped
+            for m in usab_matches:
+                nt = _norm_tournament(m.get("tournament", ""))
+                if nt and nt in flo_tourns:
+                    usab_dropped[nt] = usab_dropped.get(nt, 0) + 1
+                else:
+                    usab_kept.append(m)
+
+            if usab_dropped:
+                for nt, cnt in usab_dropped.items():
+                    print(f"=== scrape_combined: {name!r} tournament dedup: "
+                          f"dropped {cnt} USAB matches for '{nt}' (also on Flo) ===")
+
             merged = (
                 [dict(m, source="flo")  for m in flo_matches] +
-                [dict(m, source="usab") for m in usab_matches]
+                [dict(m, source="usab") for m in usab_kept]
             )
-            print(f"=== scrape_combined: {name!r} flo={len(flo_matches)} usab={len(usab_matches)} merged={len(merged)} ===")
+            print(f"=== scrape_combined: {name!r} flo={len(flo_matches)} "
+                  f"usab_raw={len(usab_matches)} usab_after_dedup={len(usab_kept)} "
+                  f"merged={len(merged)} ===")
 
             # Normalize every match: guarantee all required fields have usable defaults
             clean = []
