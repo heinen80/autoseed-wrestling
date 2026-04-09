@@ -1346,8 +1346,9 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
 
     result_re = re.compile(
         # Method token: Dec / TF / MD / Fall (full word) / Forfeit / For. / Inj. Def.
-        # Also bare "F" (fall by pin, score is a time like "1:50" or "0:51").
-        r'\b(Dec|TF|MD|Fall|Forfeit|For\.?|Inj\.?\s*Def\.?|F)\b'
+        # Bare "F" = fall by pin (score is a time like "1:50").
+        # SV = Sudden Victory, TB = Tiebreaker, OT = Overtime — all decision variants.
+        r'\b(Dec|TF|MD|Fall|Forfeit|For\.?|Inj\.?\s*Def\.?|SV|TB|OT|F)\b'
         # Optional score: "11-3" style decision score OR "1:50" style fall time.
         r'(?:\s+(\d{1,3}[-\u2013]\d{1,3}|\d{1,2}:\d{2}))?',
         re.IGNORECASE,
@@ -1467,6 +1468,8 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
             method = "md"
         elif raw_method in ("for", "forfeit"):
             method = "dec"
+        elif raw_method in ("sv", "tb", "ot"):
+            method = "dec"
         else:
             method = "dec"
 
@@ -1493,6 +1496,20 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
                 elif wname_last in after:
                     won = False
                     wl_method = "last-name-after"
+
+        # Secondary validation: if won=True, confirm wrestler name actually
+        # appears BEFORE "over" in the bout block. If it only appears after
+        # "over", the initial detection was wrong — override to loss.
+        if won and wname_last:
+            m_over2 = over_re.search(bout_block)
+            if m_over2:
+                before2 = bout_block[:m_over2.start()].lower()
+                after2  = bout_block[m_over2.end():].lower()
+                if wname_last not in before2 and wname_last in after2:
+                    print(f"=== USAB bout validation: CORRECTING win->loss for opp={opp!r} "
+                          f"wname_last={wname_last!r} not in before={before2[:80]!r} ===")
+                    won       = False
+                    wl_method = "validated-correction-loss"
 
         # Verification logging: print every bout result
         bout_log_count += 1
@@ -2208,8 +2225,9 @@ async def scrape_combined(request: Request):
         if not wrestler_entries:
             return JSONResponse({"error": "No wrestlers provided"}, status_code=400)
 
-        profiles = []
-        errors   = []
+        profiles     = []
+        errors       = []
+        dedup_notes  = []   # cross-platform dedup log; returned in response
 
         for entry in wrestler_entries:
             name    = (entry.get("name") or "").strip()
@@ -2305,9 +2323,10 @@ async def scrape_combined(request: Request):
                 raw = m.get("date")
                 ud  = _parse_match_date(raw)
                 if ud and ud in flo_date_objs:
-                    print(f"=== scrape_combined: {name!r} date dedup DROP: "
-                          f"opp={m.get('opponent')!r} raw_date={raw!r} parsed={ud} "
-                          f"(covered by Flo) ===")
+                    note = (f"{name}: dropped USAB match vs {m.get('opponent')} "
+                            f"on {raw} — date covered by Flo data")
+                    dedup_notes.append(note)
+                    print(f"=== scrape_combined: date dedup DROP: {note} ===")
                 else:
                     if ud:
                         print(f"=== scrape_combined: {name!r} date dedup KEEP: "
@@ -2403,6 +2422,7 @@ async def scrape_combined(request: Request):
                 source="combined", errors=errors,
             )
             print(f"=== scrape_combined: seeding done, weight keys={list(results_out.keys())} ===")
+            results_out["dedup_notes"] = dedup_notes
             return JSONResponse(sanitize_for_json(results_out))
 
         except Exception as seed_err:
