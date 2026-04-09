@@ -1889,11 +1889,17 @@ async def fetch_usab_profile(wrestler_id, season=None):
                         if is_first:
                             print(f"=== USAB Livewire first-event effects.html (first 3000):\n{html_frag[:3000]} ===")
 
+                        ev_date = event_date_map.get(event_uuid)
                         event_matches = _parse_usab_matches_html(
                             html_frag, event_uuid, season_start, season_end,
                             wrestler_name=wrestler_name, debug=is_first,
-                            event_date=event_date_map.get(event_uuid),
+                            event_date=ev_date,
                         )
+                        # Tag each match with its event UUID and the date we parsed
+                        # from the profile page so the debug endpoint can show them.
+                        for m in event_matches:
+                            m["event_uuid"]       = event_uuid
+                            m["raw_date_parsed"]  = ev_date.strftime("%Y-%m-%d") if ev_date else None
                         print(f"=== USAB Livewire event={event_uuid} parsed {len(event_matches)} matches ===")
                         matches.extend(event_matches)
                     except Exception as lw_err:
@@ -1930,6 +1936,55 @@ async def fetch_usab_profile(wrestler_id, season=None):
         "match_count":   len(matches),
         "error":         None,
     }
+
+# —————————
+
+# Debug endpoints
+
+# —————————
+
+@app.get("/debug/usab/{wrestler_uuid}")
+async def debug_usab(wrestler_uuid: str, season: str = None):
+    """
+    Debug endpoint: fetch and parse all USAB matches for a wrestler UUID and
+    return the raw match list with diagnostic fields.
+
+    GET /debug/usab/UUID
+    GET /debug/usab/UUID?season=2025-26
+
+    Each match in the response includes:
+      opponent, won, method, tournament, date, score,
+      event_uuid, raw_date_parsed
+    """
+    try:
+        profile = await fetch_usab_profile(wrestler_uuid, season=season)
+        matches = profile.get("matches") or []
+        wins   = sum(1 for m in matches if m.get("won"))
+        losses = len(matches) - wins
+        return JSONResponse({
+            "wrestler_id":   profile.get("wrestler_id"),
+            "wrestler_name": profile.get("wrestler_name"),
+            "match_count":   len(matches),
+            "record":        f"{wins}-{losses}",
+            "error":         profile.get("error"),
+            "matches":       [
+                {
+                    "opponent":        m.get("opponent"),
+                    "won":             m.get("won"),
+                    "method":          m.get("method"),
+                    "score":           m.get("score"),
+                    "tournament":      m.get("tournament"),
+                    "date":            m.get("date"),
+                    "event_uuid":      m.get("event_uuid"),
+                    "raw_date_parsed": m.get("raw_date_parsed"),
+                }
+                for m in matches
+            ],
+        })
+    except Exception as e:
+        import traceback as _tb
+        return JSONResponse({"error": str(e), "trace": _tb.format_exc()}, status_code=500)
+
 
 # —————————
 
