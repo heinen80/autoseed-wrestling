@@ -2280,19 +2280,38 @@ async def scrape_combined(request: Request):
                   f"pass={usab_passed} fail={usab_filtered} no_date={len(usab_matches)-usab_passed} ===")
 
             # Date-based cross-platform dedup: drop any USAB match whose date
-            # is already covered by a Flo match. Tournaments on both platforms
-            # run on the same date, so date overlap reliably identifies doubles.
-            # Flo data is kept as more accurate.
-            flo_dates = {m.get("date") for m in flo_matches if m.get("date")}
+            # is already covered by a Flo match. Both sides are parsed to
+            # datetime.date using "%b %d, %Y" so format differences ("Feb 15,
+            # 2026" vs "Feb  5, 2026") do not cause false misses.
+            def _parse_match_date(s):
+                if not s:
+                    return None
+                for fmt in ("%b %d, %Y", "%b  %d, %Y", "%Y-%m-%d"):
+                    try:
+                        return datetime.strptime(s.strip(), fmt).date()
+                    except ValueError:
+                        pass
+                return None
+
+            flo_date_objs = set()
+            for m in flo_matches:
+                d = _parse_match_date(m.get("date"))
+                if d:
+                    flo_date_objs.add(d)
+            print(f"=== scrape_combined: {name!r} flo_dates={sorted(str(d) for d in flo_date_objs)} ===")
 
             usab_kept = []
             for m in usab_matches:
-                md = m.get("date")
-                if md and md in flo_dates:
-                    print(f"=== scrape_combined: {name!r} date dedup: "
-                          f"dropped USAB match vs {m.get('opponent')!r} "
-                          f"date={md!r} (date covered by Flo) ===")
+                raw = m.get("date")
+                ud  = _parse_match_date(raw)
+                if ud and ud in flo_date_objs:
+                    print(f"=== scrape_combined: {name!r} date dedup DROP: "
+                          f"opp={m.get('opponent')!r} raw_date={raw!r} parsed={ud} "
+                          f"(covered by Flo) ===")
                 else:
+                    if ud:
+                        print(f"=== scrape_combined: {name!r} date dedup KEEP: "
+                              f"opp={m.get('opponent')!r} raw_date={raw!r} parsed={ud} ===")
                     usab_kept.append(m)
 
             merged = (
