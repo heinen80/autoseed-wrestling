@@ -1800,44 +1800,73 @@ async def fetch_usab_profile(wrestler_id, season=None):
                 )))
                 print(f"=== USAB fetch_usab_profile: event UUIDs from wire:click: {event_uuids} ===")
 
-                # Build UUID -> event date map from the profile page HTML.
-                # Each event row has: date text, event name, then the UUID in
-                # wire:click="showResults('UUID')".  The date always appears
-                # BEFORE the UUID in the HTML, so we search only the text that
-                # precedes each UUID and take the LAST (closest) date found.
-                # Formats:
-                #   "02/15/2026"         single day
-                #   "03/06 - 03/07/2026" range — use the end date
-                profile_text = profile_resp.text
+                # Build UUID -> event date map using BeautifulSoup DOM navigation.
+                # Each event row in the profile page has a div with class
+                # "whitespace-nowrap" containing the date text, followed by the
+                # event name and a wire:click="showResults('UUID')" element.
+                # We find each showResults element, walk up through its ancestors
+                # to find the row container, then locate the whitespace-nowrap
+                # date element within that container.
                 event_date_map = {}
-                for uuid in event_uuids:
-                    idx = profile_text.find(uuid)
-                    if idx == -1:
+                for show_el in soup.find_all(attrs={"wire:click": True}):
+                    wc = show_el.get("wire:click", "")
+                    uuid_m = re.search(
+                        r"showResults\('([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}"
+                        r"-[0-9a-f]{4}-[0-9a-f]{12})'\)",
+                        wc, re.IGNORECASE,
+                    )
+                    if not uuid_m:
                         continue
-                    # Look only at the 600 chars immediately before the UUID
-                    before = profile_text[max(0, idx - 600): idx]
-                    # Try range first (take end date); find the LAST occurrence
-                    range_hits = list(re.finditer(
-                        r'\d{1,2}/\d{1,2}\s*[-\u2013]\s*(\d{1,2}/\d{1,2}/\d{4})\b', before
-                    ))
-                    if range_hits:
+                    ev_uuid = uuid_m.group(1)
+                    if ev_uuid in event_date_map:
+                        continue  # already mapped from a previous occurrence
+
+                    # Walk up ancestors (up to 8 levels) looking for a sibling
+                    # subtree that contains a whitespace-nowrap date element.
+                    date_text = None
+                    node = show_el.parent
+                    for _ in range(8):
+                        if node is None:
+                            break
+                        date_el = node.find(
+                            lambda tag: "whitespace-nowrap" in (tag.get("class") or [])
+                        )
+                        if date_el:
+                            date_text = date_el.get_text(strip=True)
+                            break
+                        node = node.parent
+
+                    if not date_text:
+                        print(f"=== USAB event_date_map: no date element for uuid={ev_uuid} ===")
+                        continue
+
+                    # Parse date: range "MM/DD - MM/DD/YYYY" uses end date;
+                    # single "MM/DD/YYYY" used as-is.
+                    parsed = None
+                    range_m = re.search(
+                        r'\d{1,2}/\d{1,2}\s*[-\u2013]\s*(\d{1,2}/\d{1,2}/\d{4})', date_text
+                    )
+                    if range_m:
                         try:
-                            event_date_map[uuid] = datetime.strptime(
-                                range_hits[-1].group(1), "%m/%d/%Y"
-                            )
-                            continue
+                            parsed = datetime.strptime(range_m.group(1), "%m/%d/%Y")
                         except ValueError:
                             pass
-                    # Single date — take the LAST occurrence before the UUID
-                    single_hits = list(re.finditer(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', before))
-                    if single_hits:
-                        try:
-                            event_date_map[uuid] = datetime.strptime(
-                                single_hits[-1].group(1), "%m/%d/%Y"
-                            )
-                        except ValueError:
-                            pass
-                print(f"=== USAB fetch_usab_profile: event_date_map={event_date_map} ===")
+                    if parsed is None:
+                        single_m = re.search(r'\b(\d{1,2}/\d{1,2}/\d{4})\b', date_text)
+                        if single_m:
+                            try:
+                                parsed = datetime.strptime(single_m.group(1), "%m/%d/%Y")
+                            except ValueError:
+                                pass
+
+                    print(f"=== USAB event_date_map: uuid={ev_uuid} "
+                          f"date_text={date_text!r} -> {parsed} ===")
+                    if parsed:
+                        event_date_map[ev_uuid] = parsed
+
+                print(f"=== USAB fetch_usab_profile: full event_date_map: "
+                      + ", ".join(f"{k[:8]}...={v.strftime('%Y-%m-%d') if v else None}"
+                                  for k, v in event_date_map.items()) + " ===")
 
                 # Get CSRF token for Livewire AJAX requests
                 meta_csrf  = soup.find("meta", attrs={"name": "csrf-token"})
