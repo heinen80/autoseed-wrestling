@@ -1588,6 +1588,20 @@ def _parse_date_str(s):
     return None
 
 
+def _parse_match_date(s):
+    """Parse a match date string to a datetime.date object. Returns None on failure.
+    Accepts '%b %d, %Y' (e.g. 'Feb 15, 2026'), '%Y-%m-%d', ISO timestamps."""
+    if not s:
+        return None
+    for fmt in ("%b %d, %Y", "%b  %d, %Y", "%Y-%m-%d",
+                "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(s.strip(), fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
 def _dates_close(d1_str, d2_str, days=2):
     """Return True if two date strings are within `days` of each other."""
     d1 = _parse_date_str(d1_str)
@@ -2297,28 +2311,21 @@ async def scrape_combined(request: Request):
             print(f"=== scrape_combined: {name!r} USAB season filter: "
                   f"pass={usab_passed} fail={usab_filtered} no_date={len(usab_matches)-usab_passed} ===")
 
-            # Date-based cross-platform dedup: drop any USAB match whose date
-            # is already covered by a Flo match. Both sides are parsed to
-            # datetime.date using "%b %d, %Y" so format differences ("Feb 15,
-            # 2026" vs "Feb  5, 2026") do not cause false misses.
-            def _parse_match_date(s):
-                if not s:
-                    return None
-                for fmt in ("%b %d, %Y", "%b  %d, %Y", "%Y-%m-%d"):
-                    try:
-                        return datetime.strptime(s.strip(), fmt).date()
-                    except ValueError:
-                        pass
-                return None
-
+            # ── Cross-platform date dedup (runs in scrape_combined for every wrestler) ──
+            # Drop any USAB match whose date is already covered by a Flo match.
+            # Both sides parsed to datetime.date via module-level _parse_match_date.
             flo_date_objs = set()
             for m in flo_matches:
                 d = _parse_match_date(m.get("date"))
                 if d:
                     flo_date_objs.add(d)
-            print(f"=== scrape_combined: {name!r} flo_dates={sorted(str(d) for d in flo_date_objs)} ===")
 
-            usab_kept = []
+            print(f"=== scrape_combined DATE DEDUP [{name!r}]: "
+                  f"flo_dates={sorted(str(d) for d in flo_date_objs)} "
+                  f"usab_total={len(usab_matches)} ===")
+
+            usab_kept    = []
+            dedup_dropped = 0
             for m in usab_matches:
                 raw = m.get("date")
                 ud  = _parse_match_date(raw)
@@ -2326,12 +2333,14 @@ async def scrape_combined(request: Request):
                     note = (f"{name}: dropped USAB match vs {m.get('opponent')} "
                             f"on {raw} — date covered by Flo data")
                     dedup_notes.append(note)
+                    dedup_dropped += 1
                     print(f"=== scrape_combined: date dedup DROP: {note} ===")
                 else:
-                    if ud:
-                        print(f"=== scrape_combined: {name!r} date dedup KEEP: "
-                              f"opp={m.get('opponent')!r} raw_date={raw!r} parsed={ud} ===")
                     usab_kept.append(m)
+
+            print(f"=== scrape_combined DATE DEDUP [{name!r}]: "
+                  f"dropped={dedup_dropped} kept={len(usab_kept)} "
+                  f"(of {len(usab_matches)} usab matches) ===")
 
             merged = (
                 [dict(m, source="flo")  for m in flo_matches] +
