@@ -2279,27 +2279,21 @@ async def scrape_combined(request: Request):
             print(f"=== scrape_combined: {name!r} USAB season filter: "
                   f"pass={usab_passed} fail={usab_filtered} no_date={len(usab_matches)-usab_passed} ===")
 
-            # Tournament-level cross-platform dedup: if the same tournament
-            # appears on both Flo and USAB, keep only the Flo copy and drop
-            # all USAB matches from that tournament (Flo data is more accurate).
-            # Matching is done on normalised tournament names (lowercase, no
-            # punctuation, no year) — _norm_tournament handles this.
-            flo_tourns = {_norm_tournament(m.get("tournament", "")) for m in flo_matches}
-            flo_tourns.discard("")
+            # Date-based cross-platform dedup: drop any USAB match whose date
+            # is already covered by a Flo match. Tournaments on both platforms
+            # run on the same date, so date overlap reliably identifies doubles.
+            # Flo data is kept as more accurate.
+            flo_dates = {m.get("date") for m in flo_matches if m.get("date")}
 
-            usab_kept    = []
-            usab_dropped = {}   # norm_name -> count of matches dropped
+            usab_kept = []
             for m in usab_matches:
-                nt = _norm_tournament(m.get("tournament", ""))
-                if nt and nt in flo_tourns:
-                    usab_dropped[nt] = usab_dropped.get(nt, 0) + 1
+                md = m.get("date")
+                if md and md in flo_dates:
+                    print(f"=== scrape_combined: {name!r} date dedup: "
+                          f"dropped USAB match vs {m.get('opponent')!r} "
+                          f"date={md!r} (date covered by Flo) ===")
                 else:
                     usab_kept.append(m)
-
-            if usab_dropped:
-                for nt, cnt in usab_dropped.items():
-                    print(f"=== scrape_combined: {name!r} tournament dedup: "
-                          f"dropped {cnt} USAB matches for '{nt}' (also on Flo) ===")
 
             merged = (
                 [dict(m, source="flo")  for m in flo_matches] +
