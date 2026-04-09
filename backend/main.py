@@ -167,22 +167,45 @@ def build_quality(history):
     for w in history:
         top_wins[w]   = []
         bad_losses[w] = []
+        seen_tw = set()
+        seen_bl = set()
 
+        # Top wins: w must have won (opp is in w's wins list) AND opp must
+        # confirm the loss (w is in opp's losses list). Deduplicate by opp
+        # so the same opponent only counts once even if matched multiple times.
         for opp in history[w]["wins"]:
+            if opp in seen_tw:
+                continue
+            if opp not in history:
+                continue
+            # Verify the win is mutual: w should appear in opp's losses
+            if w not in history[opp]["losses"]:
+                continue
             total = len(history[opp]["wins"]) + len(history[opp]["losses"])
             if total == 0:
                 continue
             pct = len(history[opp]["wins"]) / total
             if pct >= 0.7:
                 top_wins[w].append(opp)
+                seen_tw.add(opp)
 
+        # Bad losses: w must have lost (opp is in w's losses list) AND opp
+        # must confirm the win (w is in opp's wins list). Deduplicate by opp.
         for opp in history[w]["losses"]:
+            if opp in seen_bl:
+                continue
+            if opp not in history:
+                continue
+            # Verify the loss is mutual: w should appear in opp's wins
+            if w not in history[opp]["wins"]:
+                continue
             total = len(history[opp]["wins"]) + len(history[opp]["losses"])
             if total == 0:
                 continue
             pct = len(history[opp]["wins"]) / total
             if pct <= 0.3:
                 bad_losses[w].append(opp)
+                seen_bl.add(opp)
 
     return top_wins, bad_losses
 
