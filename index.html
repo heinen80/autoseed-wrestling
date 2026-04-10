@@ -2647,8 +2647,17 @@ async function searchAthlete() {
 
 // ── ROSTER CSV IMPORT ────────────────────────────────────────────────────────
 
-let rosterRows = [];   // preview rows returned from /scrape/roster
+let rosterRows = [];        // preview rows returned from /scrape/roster
 let rosterConfirmed = {};   // row_index -> true/false
+let rosterSearchActive = null;   // row_index of row with open search, or null
+let rosterSearchResults = [];    // Flo search hits for the active search row
+let rosterSearchQuery = '';      // current query text
+let rosterSearchTimer = null;    // debounce timer handle
+
+// Minimal HTML escaper — prevents injection from CSV names / Flo responses.
+function _esc(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 async function uploadRoster() {
   const inp = document.getElementById('roster-file-input');
@@ -2659,6 +2668,11 @@ async function uploadRoster() {
   const fd = new FormData();
   fd.append('file', file);
   toast('Matching roster to FloWrestling profiles...');
+
+  // Reset search state on each new upload.
+  rosterSearchActive = null;
+  rosterSearchResults = [];
+  rosterSearchQuery = '';
 
   try {
     const res = await fetch(API + '/scrape/roster', { method: 'POST', body: fd });
@@ -2673,7 +2687,8 @@ async function uploadRoster() {
 
     renderRosterPreview();
     document.getElementById('roster-preview').style.display = 'block';
-    toast('Roster preview ready — ' + rosterRows.length + ' wrestlers');
+    const weightCount = new Set(rosterRows.map(function(w) { return w.weight; })).size;
+    toast('Roster preview ready — ' + rosterRows.length + ' wrestlers across ' + weightCount + ' weight class' + (weightCount !== 1 ? 'es' : ''));
   } catch(e) {
     toast('Roster upload failed: ' + e.message);
   }
@@ -2681,26 +2696,138 @@ async function uploadRoster() {
 
 function renderRosterPreview() {
   const el = document.getElementById('roster-table');
-  if (!rosterRows.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px;">No wrestlers found in CSV.</div>'; return; }
+  if (!rosterRows.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px;">No wrestlers found in CSV.</div>';
+    return;
+  }
 
-  el.innerHTML = rosterRows.map(function(w) {
-    const confirmed = rosterConfirmed[w.row_index];
-    const floLabel  = w.flo_id
-      ? '<span style="color:var(--gold);">' + (w.flo_name || w.flo_id) + '</span>'
-        + (w.flo_location ? ' <span style="color:var(--muted);font-size:11px;">(' + w.flo_location + ')</span>' : '')
-      : '<span style="color:var(--muted);font-style:italic;">No Flo match</span>';
-    const usabLabel = w.usab_id
-      ? '<span style="color:var(--green);">USAB: ' + w.usab_id.slice(0,8) + '...</span>'
-      : '<span style="color:var(--muted);font-size:11px;">No USAB</span>';
-    const toggleColor = confirmed ? 'var(--green)' : 'var(--muted)';
-    const toggleText  = confirmed ? 'Confirmed' : 'Skip';
-    return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border2);flex-wrap:wrap;">'
-      + '<div style="min-width:130px;font-size:13px;">' + w.name + ' <span style="color:var(--muted);font-size:11px;">(' + (w.weight || '?') + ')</span></div>'
-      + '<div style="flex:1;font-size:12px;">' + floLabel + '</div>'
-      + '<div style="font-size:11px;">' + usabLabel + '</div>'
-      + '<button onclick="rosterToggle(' + w.row_index + ')" style="padding:3px 10px;font-size:11px;border:1px solid ' + toggleColor + ';background:transparent;color:' + toggleColor + ';border-radius:4px;cursor:pointer;">' + toggleText + '</button>'
-      + '</div>';
-  }).join('');
+  // Group by weight class and sort numerically.
+  const byWeight = {};
+  rosterRows.forEach(function(w) {
+    const wt = w.weight || 'Unknown';
+    if (!byWeight[wt]) byWeight[wt] = [];
+    byWeight[wt].push(w);
+  });
+  const sortedWeights = Object.keys(byWeight).sort(function(a, b) {
+    return (parseFloat(a) || 0) - (parseFloat(b) || 0);
+  });
+
+  let html = '';
+  sortedWeights.forEach(function(wt) {
+    const group = byWeight[wt];
+    html += '<div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--gold);padding:10px 0 4px;text-transform:uppercase;border-top:1px solid var(--border);margin-top:4px;">'
+      + _esc(wt) + ' LBS &mdash; ' + group.length + ' wrestler' + (group.length !== 1 ? 's' : '') + '</div>';
+
+    group.forEach(function(w) {
+      const confirmed = rosterConfirmed[w.row_index];
+      const isSearching = rosterSearchActive === w.row_index;
+
+      let floSection;
+      if (isSearching) {
+        // Build results dropdown
+        let dropdownHtml = '';
+        if (rosterSearchResults.length) {
+          dropdownHtml = '<div style="position:absolute;top:100%;left:0;z-index:100;background:var(--bg2);border:1px solid var(--border);border-radius:4px;min-width:240px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.4);">'
+            + rosterSearchResults.map(function(r) {
+                return '<div data-idx="' + w.row_index + '" data-fid="' + _esc(r.id || '') + '" data-fname="' + _esc(r.name || '') + '" data-floc="' + _esc(r.location || '') + '" onclick="rosterSelectResult(this)" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border2);font-size:12px;" onmouseover="this.style.background=\'var(--border2)\'" onmouseout="this.style.background=\'\'"><span style="color:var(--gold);">' + _esc(r.name || '') + '</span><span style="color:var(--muted);font-size:11px;margin-left:6px;">' + _esc(r.location || '') + '</span></div>';
+              }).join('')
+            + '</div>';
+        } else if (rosterSearchQuery.length > 1) {
+          dropdownHtml = '<div style="position:absolute;top:100%;left:0;z-index:100;background:var(--bg2);border:1px solid var(--border);border-radius:4px;min-width:200px;padding:8px 10px;font-size:12px;color:var(--muted);">No results</div>';
+        }
+        floSection = '<div style="flex:1;position:relative;display:flex;align-items:center;gap:4px;">'
+          + '<input id="roster-search-inp" type="text" value="' + _esc(rosterSearchQuery) + '" oninput="rosterSearchKeyup(' + w.row_index + ',this.value)" placeholder="Search Flo by name..." style="width:170px;padding:3px 7px;font-size:12px;background:var(--bg2);border:1px solid var(--gold);color:var(--text);border-radius:3px;outline:none;">'
+          + '<button onclick="rosterCloseSearch()" style="padding:2px 7px;font-size:11px;background:transparent;border:1px solid var(--muted);color:var(--muted);border-radius:3px;cursor:pointer;">&#x2715;</button>'
+          + dropdownHtml
+          + '</div>';
+      } else {
+        const floLabel = w.flo_id
+          ? '<span style="color:var(--gold);">' + _esc(w.flo_name || w.flo_id) + '</span>'
+            + (w.flo_location ? ' <span style="color:var(--muted);font-size:11px;">(' + _esc(w.flo_location) + ')</span>' : '')
+          : '<span style="color:var(--muted);font-style:italic;">No Flo match</span>';
+        floSection = '<div style="flex:1;font-size:12px;display:flex;align-items:center;gap:6px;">'
+          + floLabel
+          + '<button onclick="rosterOpenSearch(' + w.row_index + ')" style="padding:2px 7px;font-size:10px;background:transparent;border:1px solid var(--muted);color:var(--muted);border-radius:3px;cursor:pointer;flex-shrink:0;">Search</button>'
+          + '</div>';
+      }
+
+      const usabLabel = w.usab_id
+        ? '<span style="color:var(--green);">USAB: ' + _esc(w.usab_id.slice(0,8)) + '...</span>'
+        : '<span style="color:var(--muted);font-size:11px;">No USAB</span>';
+      const toggleColor = confirmed ? 'var(--green)' : 'var(--muted)';
+      const toggleText  = confirmed ? 'Confirmed' : 'Skip';
+
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border2);flex-wrap:wrap;">'
+        + '<div style="min-width:130px;font-size:13px;">' + _esc(w.name) + ' <span style="color:var(--muted);font-size:11px;">(' + _esc(w.weight || '?') + ')</span></div>'
+        + floSection
+        + '<div style="font-size:11px;">' + usabLabel + '</div>'
+        + '<button onclick="rosterToggle(' + w.row_index + ')" style="padding:3px 10px;font-size:11px;border:1px solid ' + toggleColor + ';background:transparent;color:' + toggleColor + ';border-radius:4px;cursor:pointer;">' + toggleText + '</button>'
+        + '</div>';
+    });
+  });
+
+  el.innerHTML = html;
+
+  // Restore focus/cursor to the search input after re-render.
+  if (rosterSearchActive !== null) {
+    const inp = document.getElementById('roster-search-inp');
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
+}
+
+// ── INLINE FLO SEARCH ──
+
+function rosterOpenSearch(idx) {
+  rosterSearchActive = idx;
+  rosterSearchResults = [];
+  rosterSearchQuery = '';
+  renderRosterPreview();
+}
+
+function rosterCloseSearch() {
+  rosterSearchActive = null;
+  rosterSearchResults = [];
+  rosterSearchQuery = '';
+  clearTimeout(rosterSearchTimer);
+  renderRosterPreview();
+}
+
+function rosterSearchKeyup(idx, val) {
+  rosterSearchQuery = val;
+  clearTimeout(rosterSearchTimer);
+  if (val.length < 2) {
+    rosterSearchResults = [];
+    renderRosterPreview();
+    return;
+  }
+  rosterSearchTimer = setTimeout(async function() {
+    try {
+      const res = await fetch(API + '/search/athlete?name=' + encodeURIComponent(val));
+      const json = await res.json();
+      rosterSearchResults = (json.flo || []).filter(function(r) { return r.id; });
+    } catch(e) {
+      rosterSearchResults = [];
+    }
+    // Only re-render if the same row is still active (user didn't close).
+    if (rosterSearchActive === idx) renderRosterPreview();
+  }, 380);
+}
+
+function rosterSelectResult(el) {
+  const idx  = parseInt(el.dataset.idx, 10);
+  const id   = el.dataset.fid;
+  const name = el.dataset.fname;
+  const loc  = el.dataset.floc;
+  const row  = rosterRows.find(function(w) { return w.row_index === idx; });
+  if (row) {
+    row.flo_id       = id;
+    row.flo_name     = name;
+    row.flo_location = loc;
+    row.status       = 'matched';
+    // Auto-confirm the row after a manual selection.
+    rosterConfirmed[idx] = true;
+  }
+  rosterCloseSearch();
 }
 
 function rosterToggle(idx) {
@@ -2723,14 +2850,11 @@ async function rosterImport() {
   const confirmed = rosterRows.filter(function(w) { return rosterConfirmed[w.row_index]; });
   if (!confirmed.length) { toast('No wrestlers confirmed'); return; }
 
-  const weight = confirmed[0].weight || document.getElementById('si-weight').value.trim() || '';
-  if (!weight) { toast('Set a weight class before importing'); return; }
-
   siLog('Starting roster import for ' + confirmed.length + ' wrestler(s)...', 'info');
   toast('Importing roster...');
 
   const wrestlers = confirmed.map(function(w) {
-    return { name: w.name, weight: w.weight || weight, flo_id: w.flo_id || null, usab_id: w.usab_id || null };
+    return { name: w.name, weight: w.weight || '', flo_id: w.flo_id || null, usab_id: w.usab_id || null };
   });
 
   try {
