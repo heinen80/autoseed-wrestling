@@ -1204,11 +1204,13 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
             if field_match_counts else None
         )
 
-        # Power scores and seeds: only field wrestlers, SOS/quality from full data.
-        power_scores = build_power_scores(
-            h2h_history, full_sos, full_top_wins, full_bad_losses,
+        # Power scores and seeds: use full_history so win% and record components
+        # match what compare_breakdown uses. Filter to field wrestlers only after.
+        full_power_scores = build_power_scores(
+            full_history, full_sos, full_top_wins, full_bad_losses,
             field_match_avg=field_match_avg,
         )
+        power_scores = {k: v for k, v in full_power_scores.items() if k in field_names}
         seeds = compute_rankings(power_scores)
 
         # Common opponents from full season; outer/inner keys filtered to field.
