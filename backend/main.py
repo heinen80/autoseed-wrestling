@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from functools import cmp_to_key
 import pandas as pd
 
 app = FastAPI()
@@ -346,8 +347,40 @@ def build_power_scores(history, sos, top_wins, bad_losses, field_match_avg=None)
 
     return scores
 
-def compute_rankings(power_scores):
-    return sorted(power_scores.items(), key=lambda x: x[1], reverse=True)
+def compute_rankings(power_scores, history=None, sos=None, top_wins=None, bad_losses=None):
+    """
+    Sort wrestlers using criteria-based comparison.
+    H2H is an absolute override — if a beat b head-to-head, a ranks above b, period.
+    Remaining criteria (win quality, record, common opponents, SOS, top wins,
+    bad losses, power score) are evaluated in order via compare_breakdown when
+    there is no clear H2H result.
+    """
+    if history is None or sos is None or top_wins is None or bad_losses is None:
+        # Fallback: sort by power score only
+        return sorted(power_scores.items(), key=lambda x: x[1], reverse=True)
+
+    def cmp(a_item, b_item):
+        a = a_item[0]
+        b = b_item[0]
+        a_hist = history.get(a, {})
+        b_hist = history.get(b, {})
+        a_beat_b = b in a_hist.get("wins", [])
+        b_beat_a = a in b_hist.get("wins", [])
+        # Absolute H2H override: one-way result settles the comparison immediately
+        if a_beat_b and not b_beat_a:
+            return -1  # a ranks higher
+        if b_beat_a and not a_beat_b:
+            return 1   # b ranks higher
+        # No clear H2H (split, or none) — fall through to full criteria comparison
+        result = compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores)
+        adv = result["advantage"]
+        if adv > 0:
+            return -1  # a ranks higher
+        if adv < 0:
+            return 1   # b ranks higher
+        return 0
+
+    return sorted(power_scores.items(), key=cmp_to_key(cmp))
 
 def compare_breakdown(a, b, history, sos, top_wins, bad_losses, power_scores=None):
     """
@@ -712,7 +745,7 @@ async def upload(request: Request, file: UploadFile = File(None)):
                 history, sos, top_wins, bad_losses,
                 field_match_avg=field_match_avg,
             )
-            seeds        = compute_rankings(power_scores)
+            seeds        = compute_rankings(power_scores, history, sos, top_wins, bad_losses)
             common       = build_common(history)
             win_methods  = build_win_method_summary(history)
 
@@ -1211,7 +1244,7 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
             field_match_avg=field_match_avg,
         )
         power_scores = {k: v for k, v in full_power_scores.items() if k in field_names}
-        seeds = compute_rankings(power_scores)
+        seeds = compute_rankings(power_scores, full_history, full_sos, full_top_wins, full_bad_losses)
 
         # Common opponents from full season; outer/inner keys filtered to field.
         common = build_common(full_history)
