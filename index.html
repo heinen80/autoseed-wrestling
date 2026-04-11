@@ -1949,25 +1949,30 @@ function onDataLoaded() {
   wBar.classList.add('visible');
   const tabs = document.getElementById('weight-tabs');
   tabs.innerHTML = '';
-  for (const w in data) {
+  // Only create tabs for actual weight-class entries (must have a seeds array).
+  // Metadata keys like _meta are skipped.
+  const weightKeys = Object.keys(data).filter(function(w) {
+    return Array.isArray(data[w] && data[w].seeds);
+  });
+  weightKeys.forEach(function(w) {
     const btn = document.createElement('button');
     btn.className = 'weight-tab';
     btn.textContent = w + ' lbs';
     btn.onclick = () => selectWeight(w);
     tabs.appendChild(btn);
-  }
+  });
 
-  // Stats
-  const totalWrestlers = Object.values(data).reduce((a, v) => a + (v?.seeds?.length || 0), 0);
-  document.getElementById('stat-weights').textContent = Object.keys(data).length;
+  // Stats (only count real weight-class entries)
+  const totalWrestlers = weightKeys.reduce((a, w) => a + (data[w].seeds.length || 0), 0);
+  document.getElementById('stat-weights').textContent = weightKeys.length;
   document.getElementById('stat-wrestlers').textContent = totalWrestlers;
   document.getElementById('stat-locked').textContent = '0';
   document.getElementById('stat-debates').textContent =
-    Object.values(data).reduce((a, v) => a + (v.debate_queue?.length || 0), 0);
+    weightKeys.reduce((a, w) => a + (data[w].debate_queue?.length || 0), 0);
   document.getElementById('stats-bar').classList.add('visible');
 
   document.getElementById('toolbar').classList.add('visible');
-  selectWeight(Object.keys(data)[0]);
+  selectWeight(weightKeys[0]);
 }
 
 // ── SELECT WEIGHT ──

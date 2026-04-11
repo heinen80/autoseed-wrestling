@@ -1195,15 +1195,31 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
     all_matches  — every match row (submitted wrestler vs any opponent); used
                    for full-season SOS, quality, and common-opponent data.
     h2h_matches  — only submitted-vs-submitted rows; used for seeding structure.
-    field_names  — set of submitted wrestler names; only these appear as seeds.
+    field_names  — set of all submitted wrestler names (used as a fallback
+                   guard; per-weight isolation is enforced inside the loop).
     """
     if errors is None:
         errors = []
+
+    # Build a per-weight-class index of field wrestlers from the profiles so
+    # each weight class is seeded in complete isolation.  A wrestler entered
+    # at 67 lb must never appear in the 64 lb results.
+    field_names_by_weight = {}
+    for p in profiles:
+        wt = str(p.get("weight_class", "Unknown")).replace(" lbs", "").strip()
+        pname = p.get("wrestler_name") or p.get("wrestler_id")
+        if pname:
+            field_names_by_weight.setdefault(wt, set()).add(pname)
 
     df_all = pd.DataFrame(all_matches)
     results_out = {}
 
     for weight, all_group in df_all.groupby("weight"):
+        # Wrestlers belonging to this specific weight class only.
+        wt_field_names = field_names_by_weight.get(str(weight), set())
+        if not wt_field_names:
+            continue
+
         all_gm = all_group.to_dict(orient="records")
         # pandas converts None -> float NaN in object columns; convert back to None
         for row in all_gm:
@@ -1215,12 +1231,12 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
         full_sos = build_sos(full_history)
         full_top_wins, full_bad_losses = build_quality(full_history)
 
-        # H2H history: only submitted-vs-submitted matches.
-        # Guarantee every field wrestler appears even with 0 H2H results.
+        # H2H history: only submitted-vs-submitted matches for this weight.
+        # Guarantee every field wrestler in this weight appears even with 0 H2H results.
         h2h_gm = [m for m in h2h_matches
                   if str(m.get("weight", "")).strip() == str(weight).strip()]
         h2h_history = build_history(h2h_gm)
-        for fname in field_names:
+        for fname in wt_field_names:
             h2h_history.setdefault(fname, {
                 "wins": [], "losses": [],
                 "win_methods": {}, "loss_methods": {},
@@ -1230,7 +1246,7 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
         # Field-relative average match count for SOS confidence weighting.
         field_match_counts = [
             len(h2h_history[n]["wins"]) + len(h2h_history[n]["losses"])
-            for n in field_names if n in h2h_history
+            for n in wt_field_names if n in h2h_history
         ]
         field_match_avg = (
             sum(field_match_counts) / len(field_match_counts)
@@ -1238,19 +1254,19 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
         )
 
         # Power scores and seeds: use full_history so win% and record components
-        # match what compare_breakdown uses. Filter to field wrestlers only after.
+        # match what compare_breakdown uses. Filter to this weight's field only.
         full_power_scores = build_power_scores(
             full_history, full_sos, full_top_wins, full_bad_losses,
             field_match_avg=field_match_avg,
         )
-        power_scores = {k: v for k, v in full_power_scores.items() if k in field_names}
+        power_scores = {k: v for k, v in full_power_scores.items() if k in wt_field_names}
         seeds = compute_rankings(power_scores, full_history, full_sos, full_top_wins, full_bad_losses)
 
-        # Common opponents from full season; outer/inner keys filtered to field.
+        # Common opponents from full season; outer/inner keys filtered to this weight's field.
         common = build_common(full_history)
         common_out = {
-            k: {k2: v2 for k2, v2 in v.items() if k2 in field_names}
-            for k, v in common.items() if k in field_names
+            k: {k2: v2 for k2, v2 in v.items() if k2 in wt_field_names}
+            for k, v in common.items() if k in wt_field_names
         }
 
         win_methods = build_win_method_summary(full_history)
@@ -1266,13 +1282,19 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
         )
 
         # Circular H2H detection and resolution.
-        circular_h2h = detect_circular_h2h(h2h_history, field_names, full_sos, power_scores)
+        circular_h2h = detect_circular_h2h(h2h_history, wt_field_names, full_sos, power_scores)
 
         # Matches vs top half of field (uses full season history).
-        matches_vs_top_half = build_field_top_half_matches(full_history, seeds, field_names)
+        matches_vs_top_half = build_field_top_half_matches(full_history, seeds, wt_field_names)
 
-        def fs(d):
-            return {k: v for k, v in d.items() if k in field_names}
+        def fs(d, names=wt_field_names):
+            return {k: v for k, v in d.items() if k in names}
+
+        # Profiles belonging to this weight class.
+        wt_profiles = [
+            p for p in profiles
+            if str(p.get("weight_class", "")).replace(" lbs", "").strip() == str(weight)
+        ]
 
         results_out[str(weight)] = {
             "seeds":                 [(i + 1, w[0]) for i, w in enumerate(seeds)],
@@ -1291,15 +1313,15 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
             "matches_vs_top_half":   matches_vs_top_half,
             "field_match_avg":       round(field_match_avg, 1) if field_match_avg else None,
             "source":                source,
-            "profiles_scraped":      len(profiles),
-            "matches_processed":     len(h2h_matches),
+            "profiles_scraped":      len(wt_profiles),
+            "matches_processed":     len(h2h_gm),
             "errors":                errors,
             "profiles_index":        {
                 p["wrestler_name"]: {
                     "flo_record":  p.get("flo_record"),
                     "usab_record": p.get("usab_record"),
                 }
-                for p in profiles
+                for p in wt_profiles
                 if p.get("wrestler_name")
             },
         }
@@ -2522,10 +2544,14 @@ async def scrape_combined(request: Request):
                 (usab_profile or {}).get("wrestler_name") or
                 name
             )
+            # CSV-supplied weight is authoritative — the user explicitly assigned
+            # this wrestler to a bracket.  Scraped weight_class from Flo/USAB is
+            # used only as a fallback when the entry has no weight at all.
             weight_class = (
+                weight or
                 (flo_profile  or {}).get("weight_class") or
                 (usab_profile or {}).get("weight_class") or
-                weight or "Unknown"
+                "Unknown"
             )
 
             if not merged:
@@ -2579,7 +2605,9 @@ async def scrape_combined(request: Request):
                 source="combined", errors=errors,
             )
             print(f"=== scrape_combined: seeding done, weight keys={list(results_out.keys())} ===")
-            results_out["dedup_notes"] = dedup_notes
+            # Store metadata under a key that cannot be mistaken for a weight
+            # class — the frontend skips keys without a "seeds" property.
+            results_out["_meta"] = {"dedup_notes": dedup_notes}
             return JSONResponse(sanitize_for_json(results_out))
 
         except Exception as seed_err:
