@@ -161,9 +161,66 @@ def build_sos(history):
         sos[w] = round(sum(vals) / len(vals), 3) if vals else 0
     return sos
 
-def build_quality(history):
-    top_wins  = {}
+def build_opponent_records(all_matches):
+    """
+    Count wins and losses for every wrestler appearing in any match row.
+
+    Each physical match is counted exactly once even when it appears in
+    all_matches twice (once from each field wrestler's scraped profile).
+    Deduplication key: sorted pair of names + winner.
+
+    Returns {name: {"wins": int, "losses": int}}.
+    """
+    seen    = set()
+    records = {}
+    for m in all_matches:
+        a      = str(m.get("wrestlerA", "")).strip()
+        b      = str(m.get("wrestlerB", "")).strip()
+        winner = str(m.get("winner",    "")).strip()
+        if not a or not b or not winner:
+            continue
+        # Canonical key collapses duplicate rows from both profiles.
+        key = (min(a, b), max(a, b), winner)
+        if key in seen:
+            continue
+        seen.add(key)
+        records.setdefault(a, {"wins": 0, "losses": 0})
+        records.setdefault(b, {"wins": 0, "losses": 0})
+        if winner == a:
+            records[a]["wins"]   += 1
+            records[b]["losses"] += 1
+        else:
+            records[b]["wins"]   += 1
+            records[a]["losses"] += 1
+    return records
+
+
+def build_quality(history, opponent_records=None):
+    """
+    Compute top wins and bad losses for each wrestler.
+
+    opponent_records: {name: {"wins": int, "losses": int}} built from the
+        raw all_matches data via build_opponent_records().  When provided,
+        opponent quality is evaluated from the deduplicated season record
+        rather than from the (potentially double-counted) history dict.
+        Falls back to history counts if an opponent is not in opponent_records.
+
+    Top win:  field wrestler WON; opponent win% >= 60% AND total >= 6 matches.
+    Bad loss: field wrestler LOST; opponent win% <  40% AND total >= 4 matches.
+
+    Top wins only include opponents that appear in the wrestler's WINS list.
+    """
+    top_wins   = {}
     bad_losses = {}
+
+    def _opp_wl(opp):
+        """Return (wins, losses) for opp using opponent_records when available."""
+        if opponent_records and opp in opponent_records:
+            r = opponent_records[opp]
+            return r["wins"], r["losses"]
+        if opp in history:
+            return len(history[opp]["wins"]), len(history[opp]["losses"])
+        return 0, 0
 
     for w in history:
         top_wins[w]   = []
@@ -171,42 +228,30 @@ def build_quality(history):
         seen_tw = set()
         seen_bl = set()
 
-        # Top wins: w must have won (opp is in w's wins list) AND opp must
-        # confirm the loss (w is in opp's losses list). Deduplicate by opp
-        # so the same opponent only counts once even if matched multiple times.
+        # Top wins: field wrestler must have WON this match.
+        # Iterate only the wins list; seen_tw deduplicates repeated opponents.
         for opp in history[w]["wins"]:
             if opp in seen_tw:
                 continue
-            if opp not in history:
+            seen_tw.add(opp)
+            opp_w, opp_l = _opp_wl(opp)
+            total = opp_w + opp_l
+            if total < 6:
                 continue
-            # Verify the win is mutual: w should appear in opp's losses
-            if w not in history[opp]["losses"]:
-                continue
-            total = len(history[opp]["wins"]) + len(history[opp]["losses"])
-            if total == 0:
-                continue
-            pct = len(history[opp]["wins"]) / total
-            if pct >= 0.7:
+            if (opp_w / total) >= 0.60:
                 top_wins[w].append(opp)
-                seen_tw.add(opp)
 
-        # Bad losses: w must have lost (opp is in w's losses list) AND opp
-        # must confirm the win (w is in opp's wins list). Deduplicate by opp.
+        # Bad losses: field wrestler must have LOST this match.
         for opp in history[w]["losses"]:
             if opp in seen_bl:
                 continue
-            if opp not in history:
+            seen_bl.add(opp)
+            opp_w, opp_l = _opp_wl(opp)
+            total = opp_w + opp_l
+            if total < 4:
                 continue
-            # Verify the loss is mutual: w should appear in opp's wins
-            if w not in history[opp]["wins"]:
-                continue
-            total = len(history[opp]["wins"]) + len(history[opp]["losses"])
-            if total == 0:
-                continue
-            pct = len(history[opp]["wins"]) / total
-            if pct <= 0.3:
+            if (opp_w / total) < 0.40:
                 bad_losses[w].append(opp)
-                seen_bl.add(opp)
 
     return top_wins, bad_losses
 
@@ -731,9 +776,10 @@ async def upload(request: Request, file: UploadFile = File(None)):
         for weight, group in df.groupby("weight"):
             gm = group.to_dict(orient="records")
 
-            history      = build_history(gm)
-            sos          = build_sos(history)
-            top_wins, bad_losses = build_quality(history)
+            history          = build_history(gm)
+            sos              = build_sos(history)
+            opponent_records = build_opponent_records(gm)
+            top_wins, bad_losses = build_quality(history, opponent_records)
 
             match_counts = [
                 len(history[n]["wins"]) + len(history[n]["losses"])
@@ -1228,8 +1274,11 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
 
         # Full history: all opponents for accurate SOS / quality / common-opponent.
         full_history = build_history(all_gm)
-        full_sos = build_sos(full_history)
-        full_top_wins, full_bad_losses = build_quality(full_history)
+        full_sos     = build_sos(full_history)
+        # Build opponent records from raw match rows (deduplicated) so quality
+        # evaluation uses each physical match exactly once.
+        opponent_records = build_opponent_records(all_gm)
+        full_top_wins, full_bad_losses = build_quality(full_history, opponent_records)
 
         # H2H history: only submitted-vs-submitted matches for this weight.
         # Guarantee every field wrestler in this weight appears even with 0 H2H results.
