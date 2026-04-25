@@ -1798,8 +1798,12 @@ async def search_flo_athlete(name, weight=None):
     Returns up to 5 matches as {source, id, name, location, weight} dicts.
     Weight is only used as a label — not a search filter.
     """
-    headers = dict(FLO_API_HEADERS)
-    headers["content-type"] = "application/json"
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "origin": "https://www.flowrestling.org",
+        "user-agent": "Mozilla/5.0",
+    }
     payload = {
         "domain": "11FloWrestling000",
         "offsetPerGroup": 0,
@@ -1809,12 +1813,12 @@ async def search_flo_athlete(name, weight=None):
     }
     print("=== search_flo_athlete DEBUG ===")
     print(f"URL:     {FLO_SEARCH_URL}")
+    print(f"HEADERS: {headers}")
     print(f"PAYLOAD: {json.dumps(payload)}")
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             resp = await client.post(FLO_SEARCH_URL, json=payload, headers=headers)
             print(f"STATUS:  {resp.status_code}")
-            print(f"RESPONSE HEADERS: {dict(resp.headers)}")
             print(f"RESPONSE BODY:\n{resp.text}")
             resp.raise_for_status()
             data = resp.json()
