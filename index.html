@@ -2071,7 +2071,7 @@ async function uploadRoster() {
     rosterRows = json.wrestlers || [];
     rosterConfirmed = {};
     rosterRows.forEach(function(w) {
-      rosterConfirmed[w.row_index] = w.status === 'matched' || w.status === 'flo_id_provided';
+      rosterConfirmed[w.row_index] = w.status === 'matched' || w.status === 'flo_id_provided' || w.status === 'usab_only';
     });
 
     renderRosterPreview();
@@ -2116,16 +2116,16 @@ function renderRosterPreview() {
         // Build results dropdown
         let dropdownHtml = '';
         if (rosterSearchResults.length) {
-          dropdownHtml = '<div style="position:absolute;top:100%;left:0;z-index:100;background:var(--bg2);border:1px solid var(--border);border-radius:4px;min-width:240px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.4);">'
+          dropdownHtml = '<div style="position:absolute;top:100%;left:0;z-index:200;background:#0f0f1a;border:1px solid var(--gold);border-radius:4px;min-width:260px;max-height:180px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,0.7);">'
             + rosterSearchResults.map(function(r) {
-                return '<div data-idx="' + w.row_index + '" data-fid="' + _esc(r.id || '') + '" data-fname="' + _esc(r.name || '') + '" data-floc="' + _esc(r.location || '') + '" onclick="rosterSelectResult(this)" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border2);font-size:12px;" onmouseover="this.style.background=\'var(--border2)\'" onmouseout="this.style.background=\'\'"><span style="color:var(--gold);">' + _esc(r.name || '') + '</span><span style="color:var(--muted);font-size:11px;margin-left:6px;">' + _esc(r.location || '') + '</span></div>';
+                return '<div data-idx="' + w.row_index + '" data-fid="' + _esc(r.id || '') + '" data-fname="' + _esc(r.name || '') + '" data-floc="' + _esc(r.location || '') + '" onclick="rosterSelectResult(this)" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;background:#0f0f1a;" onmouseover="this.style.background=\'#1e1e30\'" onmouseout="this.style.background=\'#0f0f1a\'"><span style="color:var(--gold);">' + _esc(r.name || '') + '</span><span style="color:var(--muted);font-size:11px;margin-left:6px;">' + _esc(r.location || '') + '</span></div>';
               }).join('')
             + '</div>';
         } else if (rosterSearchQuery.length > 1) {
-          dropdownHtml = '<div style="position:absolute;top:100%;left:0;z-index:100;background:var(--bg2);border:1px solid var(--border);border-radius:4px;min-width:200px;padding:8px 10px;font-size:12px;color:var(--muted);">No results</div>';
+          dropdownHtml = '<div style="position:absolute;top:100%;left:0;z-index:200;background:#0f0f1a;border:1px solid var(--border);border-radius:4px;min-width:200px;padding:8px 10px;font-size:12px;color:var(--muted);">No results</div>';
         }
         floSection = '<div style="flex:1;position:relative;display:flex;align-items:center;gap:4px;">'
-          + '<input id="roster-search-inp" type="text" value="' + _esc(rosterSearchQuery) + '" oninput="rosterSearchKeyup(' + w.row_index + ',this.value)" placeholder="Search Flo by name..." style="width:170px;padding:3px 7px;font-size:12px;background:var(--bg2);border:1px solid var(--gold);color:var(--text);border-radius:3px;outline:none;">'
+          + '<input id="roster-search-inp" type="text" value="' + _esc(rosterSearchQuery) + '" oninput="rosterSearchKeyup(' + w.row_index + ',this.value)" placeholder="Search Flo by name..." style="width:170px;padding:3px 7px;font-size:12px;background:#0f0f1a;border:1px solid var(--gold);color:var(--text);border-radius:3px;outline:none;">'
           + '<button onclick="rosterCloseSearch()" style="padding:2px 7px;font-size:11px;background:transparent;border:1px solid var(--muted);color:var(--muted);border-radius:3px;cursor:pointer;">&#x2715;</button>'
           + dropdownHtml
           + '</div>';
@@ -2133,7 +2133,9 @@ function renderRosterPreview() {
         const floLabel = w.flo_id
           ? '<span style="color:var(--gold);">' + _esc(w.flo_name || w.flo_id) + '</span>'
             + (w.flo_location ? ' <span style="color:var(--muted);font-size:11px;">(' + _esc(w.flo_location) + ')</span>' : '')
-          : '<span style="color:var(--muted);font-style:italic;">No Flo match</span>';
+          : (w.usab_id
+            ? '<span style="color:var(--muted);font-style:italic;">USAB only</span>'
+            : '<span style="color:var(--muted);font-style:italic;">No Flo match</span>');
         floSection = '<div style="flex:1;font-size:12px;display:flex;align-items:center;gap:6px;">'
           + floLabel
           + '<button onclick="rosterOpenSearch(' + w.row_index + ')" style="padding:2px 7px;font-size:10px;background:transparent;border:1px solid var(--muted);color:var(--muted);border-radius:3px;cursor:pointer;flex-shrink:0;">Search</button>'
