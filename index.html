@@ -2337,7 +2337,8 @@ async function importCombined() {
 }
 
 // Initialize with 3 empty wrestler slots when Flo tab opens
-document.getElementById('tab-flo').addEventListener('click', function() {
+const tabFlo = document.getElementById('tab-flo');
+if (tabFlo) tabFlo.addEventListener('click', function() {
   const list = document.getElementById('flo-wrestler-list');
   if (list && list.children.length === 0) {
     addFloWrestler();
