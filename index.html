@@ -2130,10 +2130,12 @@ function renderRosterPreview() {
           + dropdownHtml
           + '</div>';
       } else {
-        const floId = w.flo_id != null ? String(w.flo_id) : '';
+        const floId = (w.flo_id !== null && w.flo_id !== undefined && w.flo_id !== '') ? String(w.flo_id) : '';
+        const floName = w.flo_name || '';
+        const floLoc  = w.flo_location || '';
         const floLabel = floId
-          ? '<span style="color:var(--gold);">' + _esc(w.flo_name || floId) + '</span>'
-            + (w.flo_location ? ' <span style="color:var(--muted);font-size:11px;">(' + _esc(w.flo_location) + ')</span>' : '')
+          ? '<span style="color:var(--gold);">' + _esc(floName || floId) + '</span>'
+            + (floLoc ? ' <span style="color:var(--muted);font-size:11px;">(' + _esc(floLoc) + ')</span>' : '')
           : (w.usab_id
             ? '<span style="color:var(--muted);font-style:italic;">USAB only</span>'
             : '<span style="color:var(--muted);font-style:italic;">No Flo match</span>');
