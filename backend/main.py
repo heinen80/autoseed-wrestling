@@ -1823,11 +1823,26 @@ async def search_flo_athlete(name, weight=None):
             resp.raise_for_status()
             data = resp.json()
 
+        print(f"=== search_flo_athlete: parsing response for {name!r} ===")
+        print(f"  top-level keys: {list(data.keys())}")
+        raw_sections = data.get("data") or []
+        print(f"  data[] length: {len(raw_sections)}")
+        for si, section in enumerate(raw_sections):
+            raw_items = section.get("items") or []
+            print(f"  section[{si}] keys={list(section.keys())} items={len(raw_items)}")
+            for ii, item in enumerate(raw_items):
+                print(f"    item[{ii}] raw keys={list(item.keys())}")
+                print(f"    item[{ii}] id={item.get('id')!r}  ofpId={item.get('ofpId')!r}  title={item.get('title')!r}  metadata2={item.get('metadata2')!r}")
+
         items = []
         for section in (data.get("data") or []):
             for item in (section.get("items") or []):
-                flo_id = item.get("id") or item.get("ofpId")
+                raw_id = item.get("id")
+                raw_ofp = item.get("ofpId")
+                flo_id = raw_id if raw_id not in (None, "", 0) else raw_ofp
+                print(f"  -> raw_id={raw_id!r} raw_ofp={raw_ofp!r} => flo_id={flo_id!r}")
                 if not flo_id:
+                    print(f"     SKIPPED (no id)")
                     continue
                 title = item.get("title") or ""
                 parts = [p.strip() for p in title.split(",", 1)]
@@ -1841,27 +1856,37 @@ async def search_flo_athlete(name, weight=None):
                     "weight":   str(weight or ""),
                 })
 
+        print(f"  items collected: {len(items)}")
+        for i, it in enumerate(items):
+            print(f"  collected[{i}] id={it['id']!r} title={it['title']!r} location={it['location']!r}")
+
         if not items:
+            print(f"  RESULT: no items -> returning []")
             return []
 
         # Prefer Kansas match
         ks_matches = [i for i in items if "KS" in i["location"] or "Kansas" in i["location"]]
         if ks_matches:
             best = ks_matches[0]
+            print(f"  SELECTION: Kansas match -> id={best['id']!r} title={best['title']!r} location={best['location']!r}")
         else:
-            # Prefer item whose title tokens closely match the search name
             name_tokens = set(name.lower().split())
             def name_score(item):
                 title_tokens = set(item["title"].lower().replace(",", " ").split())
                 return len(name_tokens & title_tokens)
             scored = sorted(items, key=name_score, reverse=True)
             best = scored[0]
+            print(f"  SELECTION: best name match (score={name_score(best)}) -> id={best['id']!r} title={best['title']!r}")
 
+        print(f"  RETURNING flo_id={best['id']!r}")
         # Return best match first, then remaining (up to 5 total)
         rest = [i for i in items if i["id"] != best["id"]]
         results = [best] + rest
         return results[:5]
     except Exception as e:
+        import traceback
+        print(f"=== search_flo_athlete EXCEPTION: {e} ===")
+        print(traceback.format_exc())
         return [{"source": "flo", "error": str(e)}]
 
 
@@ -2690,3 +2715,18 @@ async def scrape_combined(request: Request):
         tb_str = _tb.format_exc()
         print(f"=== scrape_combined OUTER ERROR: {e}\n{tb_str} ===")
         return JSONResponse({"error": str(e), "trace": tb_str}, status_code=500)
+
+
+# ── quick test ──────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import asyncio
+    async def _test():
+        for name in ("Kason Goad", "Austin Hann"):
+            print(f"\n{'='*60}")
+            print(f"TEST: search_flo_athlete({name!r})")
+            print('='*60)
+            results = await search_flo_athlete(name)
+            print(f"FINAL RESULTS ({len(results)}):")
+            for r in results:
+                print(f"  {r}")
+    asyncio.run(_test())
