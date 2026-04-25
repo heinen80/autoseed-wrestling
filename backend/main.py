@@ -1809,7 +1809,7 @@ async def search_flo_athlete(name, weight=None):
         "offsetPerGroup": 0,
         "search": name,
         "limitPerGroup": 20,
-        "entities": ["person"],
+        "entities": ["athlete"],
     }
     print("=== search_flo_athlete DEBUG ===")
     print(f"URL:     {FLO_SEARCH_URL}")
