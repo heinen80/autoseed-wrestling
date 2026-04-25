@@ -1823,28 +1823,44 @@ async def search_flo_athlete(name, weight=None):
             resp.raise_for_status()
             data = resp.json()
 
-        results = []
+        items = []
         for section in (data.get("data") or []):
             for item in (section.get("items") or []):
-                ofp_id = item.get("ofpId")
-                if not ofp_id:
+                flo_id = item.get("id") or item.get("ofpId")
+                if not flo_id:
                     continue
                 title = item.get("title") or ""
-                # title is "Lastname, Firstname" — convert to "Firstname Lastname"
                 parts = [p.strip() for p in title.split(",", 1)]
                 display_name = f"{parts[1]} {parts[0]}" if len(parts) == 2 else title
-                results.append({
+                items.append({
                     "source":   "flo",
-                    "id":       str(ofp_id),
+                    "id":       str(flo_id),
                     "name":     display_name,
+                    "title":    title,
                     "location": item.get("metadata2") or "",
                     "weight":   str(weight or ""),
                 })
-                if len(results) >= 5:
-                    break
-            if len(results) >= 5:
-                break
-        return results
+
+        if not items:
+            return []
+
+        # Prefer Kansas match
+        ks_matches = [i for i in items if "KS" in i["location"] or "Kansas" in i["location"]]
+        if ks_matches:
+            best = ks_matches[0]
+        else:
+            # Prefer item whose title tokens closely match the search name
+            name_tokens = set(name.lower().split())
+            def name_score(item):
+                title_tokens = set(item["title"].lower().replace(",", " ").split())
+                return len(name_tokens & title_tokens)
+            scored = sorted(items, key=name_score, reverse=True)
+            best = scored[0]
+
+        # Return best match first, then remaining (up to 5 total)
+        rest = [i for i in items if i["id"] != best["id"]]
+        results = [best] + rest
+        return results[:5]
     except Exception as e:
         return [{"source": "flo", "error": str(e)}]
 
@@ -2425,7 +2441,7 @@ async def scrape_roster(file: UploadFile = File(...)):
                         entry["flo_location"] = top.get("location")
                         entry["status"]       = "matched"
                     else:
-                        entry["status"] = "no_flo_match"
+                        entry["status"] = "usab_only" if usab_id else "no_flo_match"
                 except Exception as e:
                     entry["status"] = f"error: {e}"
             else:
