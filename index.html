@@ -2130,8 +2130,9 @@ function renderRosterPreview() {
           + dropdownHtml
           + '</div>';
       } else {
-        const floLabel = w.flo_id
-          ? '<span style="color:var(--gold);">' + _esc(w.flo_name || w.flo_id) + '</span>'
+        const floId = w.flo_id != null ? String(w.flo_id) : '';
+        const floLabel = floId
+          ? '<span style="color:var(--gold);">' + _esc(w.flo_name || floId) + '</span>'
             + (w.flo_location ? ' <span style="color:var(--muted);font-size:11px;">(' + _esc(w.flo_location) + ')</span>' : '')
           : (w.usab_id
             ? '<span style="color:var(--muted);font-style:italic;">USAB only</span>'

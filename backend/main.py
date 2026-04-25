@@ -1845,8 +1845,8 @@ async def search_flo_athlete(name, weight=None):
                     print(f"     SKIPPED (no id)")
                     continue
                 title = item.get("title") or ""
-                parts = [p.strip() for p in title.split(",", 1)]
-                display_name = f"{parts[1]} {parts[0]}" if len(parts) == 2 else title
+                parts = [p.strip().title() for p in title.split(",", 1)]
+                display_name = f"{parts[1]} {parts[0]}" if len(parts) == 2 else title.title()
                 items.append({
                     "source":   "flo",
                     "id":       str(flo_id),
@@ -1871,12 +1871,20 @@ async def search_flo_athlete(name, weight=None):
             print(f"  SELECTION: Kansas match -> id={best['id']!r} title={best['title']!r} location={best['location']!r}")
         else:
             name_tokens = set(name.lower().split())
-            def name_score(item):
-                title_tokens = set(item["title"].lower().replace(",", " ").split())
-                return len(name_tokens & title_tokens)
-            scored = sorted(items, key=name_score, reverse=True)
-            best = scored[0]
-            print(f"  SELECTION: best name match (score={name_score(best)}) -> id={best['id']!r} title={best['title']!r}")
+            def title_tokens(item):
+                return set(item["title"].lower().replace(",", " ").split())
+            # Require ALL query tokens to appear exactly in the title tokens (no substring match)
+            exact = [i for i in items if name_tokens <= title_tokens(i)]
+            if exact:
+                best = exact[0]
+                print(f"  SELECTION: exact token match -> id={best['id']!r} title={best['title']!r}")
+            else:
+                # Partial overlap fallback — most tokens matched
+                def name_score(item):
+                    return len(name_tokens & title_tokens(item))
+                scored = sorted(items, key=name_score, reverse=True)
+                best = scored[0]
+                print(f"  SELECTION: partial match fallback (score={name_score(best)}/{len(name_tokens)}) -> id={best['id']!r} title={best['title']!r}")
 
         print(f"  RETURNING flo_id={best['id']!r}")
         # Return best match first, then remaining (up to 5 total)
