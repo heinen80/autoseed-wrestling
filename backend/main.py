@@ -641,7 +641,6 @@ def build_alerts(seeds, history, sos, top_wins, bad_losses, confidence, power_sc
     names = [s[0] for s in seeds]
 
     for i, name in enumerate(names):
-        # Upset potential: low seed with top wins or strong SOS
         if i >= 5 and (len(top_wins[name]) >= 2 or sos[name] >= 0.55):
             upset_alerts.append(
                 f"{name} (seed {i+1}) is dangerous: "
@@ -649,21 +648,28 @@ def build_alerts(seeds, history, sos, top_wins, bad_losses, confidence, power_sc
             )
 
         if i < len(names) - 1:
-            nxt  = names[i + 1]
+            nxt    = names[i + 1]
+            a_hist = history.get(name, {})
+            b_hist = history.get(nxt, {})
+
+            # Clear H2H = never a debate, period
+            a_beat_b  = nxt  in a_hist.get("wins", [])
+            b_beat_a  = name in b_hist.get("wins", [])
+            clear_h2h = (a_beat_b and not b_beat_a) or (b_beat_a and not a_beat_b)
+
             comp = compare_breakdown(name, nxt, history, sos, top_wins, bad_losses, power_scores)
 
-            # Flag if algorithm prefers the lower seed
             if comp["winner"] == nxt:
                 controversy_flags.append(
                     f"Seed {i+1} vs {i+2}: algorithm favors {nxt} over {name} — review recommended"
                 )
 
-            # Debate queue: close matchup or algorithm is uncertain
-            if abs(comp["advantage"]) <= 2 or comp["winner"] == "Too close":
+            # Only flag as debate if: no clear H2H AND algorithm genuinely cannot separate them
+            if not clear_h2h and abs(comp["advantage"]) <= 1:
                 debate_queue.append({
-                    "higher": name,
-                    "lower":  nxt,
-                    "reason": comp["reasons"][0] if comp["reasons"] else "No clear separator",
+                    "higher":    name,
+                    "lower":     nxt,
+                    "reason":    comp["reasons"][0] if comp["reasons"] else "No clear separator",
                     "advantage": comp["advantage"],
                 })
 
@@ -1367,6 +1373,8 @@ def _run_seeding_engine(profiles, all_matches, h2h_matches, field_names,
             "errors":                errors,
             "profiles_index":        {
                 p["wrestler_name"]: {
+                    "flo_id":      p.get("flo_id"),
+                    "usab_id":     p.get("usab_id"),
                     "flo_record":  p.get("flo_record"),
                     "usab_record": p.get("usab_record"),
                 }

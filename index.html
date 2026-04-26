@@ -1430,15 +1430,19 @@ function renderSeedPanel() {
     const record = wl ? `${wl.wins.length}-${wl.losses.length}` : '—';
     const isSelected = selectedRow === i;
     const pi = g.profiles_index && g.profiles_index[name];
-    const floRec  = pi && pi.flo_record  ? pi.flo_record  : null;
-    const usabRec = pi && pi.usab_record ? pi.usab_record : null;
-    const sourceBreakdown = (floRec || usabRec)
-      ? `<div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:2px;">`
-        + (floRec  ? `Flo: ${floRec}`   : '')
-        + (floRec && usabRec ? ' | ' : '')
-        + (usabRec ? `USAB: ${usabRec}` : '')
-        + `</div>`
-      : '';
+    const floId   = pi && pi.flo_id;
+    const usabId  = pi && pi.usab_id;
+    const floRec  = pi && pi.flo_record;
+    const usabRec = pi && pi.usab_record;
+
+    const floIndicator  = floId
+      ? `<span style="color:var(--gold);">● Flo${floRec ? ': ' + floRec : ''}</span>`
+      : `<span style="color:var(--muted);opacity:0.5;">○ Flo</span>`;
+    const usabIndicator = usabId
+      ? `<span style="color:var(--green);">● USAB${usabRec ? ': ' + usabRec : ''}</span>`
+      : `<span style="color:var(--muted);opacity:0.5;">○ USAB</span>`;
+
+    const sourceBreakdown = `<div style="font-size:10px;font-family:var(--font-mono);margin-top:2px;display:flex;gap:8px;">${floIndicator}${usabIndicator}</div>`;
 
     html += `
       <div class="seed-row seed-${i+1} ${isSelected ? 'selected' : ''}" onclick="handleRowClick(${i})">
