@@ -613,23 +613,35 @@ def build_win_method_summary(history):
     return summary
 
 def build_confidence(seeds, history, sos, top_wins, bad_losses, power_scores):
-    """
-    Confidence is based on the compare_breakdown advantage score.
-    Uses the same unified algorithm — no more divergence.
-    """
     conf = {}
     seed_names = [s[0] for s in seeds]
 
     for i, (name, _) in enumerate(seeds):
         if i == len(seeds) - 1:
-            conf[name] = 55  # last seed has no one below to compare
+            conf[name] = 55
             continue
 
         nxt = seed_names[i + 1]
+        a_hist = history.get(name, {})
+        b_hist = history.get(nxt, {})
+
+        # Clear H2H with no split — immediately high confidence
+        a_beat_b = nxt  in a_hist.get("wins", [])
+        b_beat_a = name in b_hist.get("wins", [])
+
         comp = compare_breakdown(name, nxt, history, sos, top_wins, bad_losses, power_scores)
 
-        # Advantage of +10 → 100% confidence, -10 → 0% confidence
-        raw = 50 + comp["advantage"] * 4
+        if a_beat_b and not b_beat_a:
+            # Higher seed beat lower seed cleanly — base confidence starts at 80,
+            # additional factors (common opponents, SOS) push it to LOCK territory
+            raw = 80 + comp["advantage"] * 2
+        elif b_beat_a and not a_beat_b:
+            # Lower seed beat higher seed — this is a controversy, confidence is low
+            raw = 50 + comp["advantage"] * 4
+        else:
+            # No H2H or split — use standard formula with slightly stronger multiplier
+            raw = 50 + comp["advantage"] * 5
+
         conf[name] = max(10, min(97, int(raw)))
 
     return conf
