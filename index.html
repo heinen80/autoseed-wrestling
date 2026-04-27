@@ -1061,7 +1061,7 @@
         <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
           <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;">SEASON &amp; WEIGHT CLASS</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <select id="si-season" class="vote-select">
+            <select id="si-season" class="vote-select" onchange="updateDateWindowDisplay()">
               <option value="2025-26">2025-26 Season (Nov 2025 - Mar 2026)</option>
               <option value="2024-25">2024-25 Season (Nov 2024 - Mar 2025)</option>
               <option value="2023-24">2023-24 Season (Nov 2023 - Mar 2024)</option>
@@ -1105,6 +1105,47 @@
           <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:8px;">WRESTLERS TO SEED</div>
           <div id="si-wrestler-list"></div>
           <div id="si-empty" style="font-size:12px;color:var(--muted);font-style:italic;">No wrestlers added yet — search above.</div>
+        </div>
+
+        <div style="padding:16px 18px;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:12px;">SEEDING OPTIONS</div>
+
+          <!-- Mode toggle — most important, visually prominent -->
+          <div style="margin-bottom:14px;">
+            <div style="font-size:11px;color:var(--muted2);margin-bottom:7px;">Mode</div>
+            <div style="display:flex;gap:0;border:1px solid var(--gold);border-radius:6px;overflow:hidden;width:fit-content;">
+              <button id="mode-btn-folkstyle" onclick="setMode('folkstyle')"
+                style="padding:7px 20px;font-size:12px;font-family:var(--font-mono);font-weight:700;letter-spacing:1px;border:none;cursor:pointer;background:var(--gold);color:#0a0a14;transition:background 0.15s,color 0.15s;">
+                FOLKSTYLE
+              </button>
+              <button id="mode-btn-freestyle" onclick="setMode('freestyle')"
+                style="padding:7px 20px;font-size:12px;font-family:var(--font-mono);font-weight:700;letter-spacing:1px;border:none;cursor:pointer;background:transparent;color:var(--gold);transition:background 0.15s,color 0.15s;">
+                FREESTYLE
+              </button>
+            </div>
+            <div id="si-date-window" style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-top:5px;">Window: Sep 1 2025 &ndash; Mar 31 2026</div>
+          </div>
+
+          <!-- Secondary controls -->
+          <div style="display:flex;flex-direction:column;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;">
+            <!-- Cutoff date -->
+            <div>
+              <label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px;" for="si-cutoff-date">Cutoff Date <span style="color:var(--muted);font-style:italic;">(optional)</span></label>
+              <input type="date" id="si-cutoff-date"
+                style="padding:4px 8px;font-size:12px;font-family:var(--font-mono);background:#0f0f1a;border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;"
+                title="Use this to seed retrospectively — only matches before this date will be counted.">
+              <div style="font-size:10px;color:var(--muted);margin-top:3px;">Use this to seed retrospectively — only matches before this date will be counted.</div>
+            </div>
+
+            <!-- Freestyle supplement checkbox — only shown in folkstyle mode -->
+            <div id="si-freestyle-row">
+              <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="si-include-freestyle"
+                  style="margin-top:2px;accent-color:var(--gold);width:14px;height:14px;flex-shrink:0;">
+                <span style="font-size:11px;color:var(--muted2);line-height:1.5;">Include prior freestyle/greco results <span style="color:var(--muted);font-style:italic;">(affects strength of schedule only — not head-to-head or common opponents)</span></span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <div style="padding:16px 18px;">
@@ -1893,6 +1934,46 @@ function siLogClear() {
 let siWrestlers = [];        // confirmed wrestlers ready to import
 let siSearchCandidates = []; // last search result cards (indexed by siAddWrestler arg)
 
+// ── Seeding filter state ──────────────────────────────────────────────────────
+let selectedMode      = 'folkstyle';
+let includeFreestyle  = false;
+
+function setMode(mode) {
+  selectedMode = mode;
+  const btnFolk = document.getElementById('mode-btn-folkstyle');
+  const btnFree = document.getElementById('mode-btn-freestyle');
+  const fsRow   = document.getElementById('si-freestyle-row');
+  if (btnFolk && btnFree) {
+    if (mode === 'folkstyle') {
+      btnFolk.style.background = 'var(--gold)';
+      btnFolk.style.color      = '#0a0a14';
+      btnFree.style.background = 'transparent';
+      btnFree.style.color      = 'var(--gold)';
+    } else {
+      btnFree.style.background = 'var(--gold)';
+      btnFree.style.color      = '#0a0a14';
+      btnFolk.style.background = 'transparent';
+      btnFolk.style.color      = 'var(--gold)';
+    }
+  }
+  if (fsRow) fsRow.style.display = (mode === 'folkstyle') ? '' : 'none';
+  updateDateWindowDisplay();
+}
+
+function updateDateWindowDisplay() {
+  const el = document.getElementById('si-date-window');
+  if (!el) return;
+  const season  = document.getElementById('si-season');
+  const val     = season ? season.value : '2025-26';
+  const startYr = parseInt((val || '2025-26').split('-')[0], 10);
+  const endYr   = startYr + 1;
+  if (selectedMode === 'freestyle') {
+    el.textContent = 'Window: Apr 1 ' + endYr + ' \u2013 Aug 31 ' + endYr;
+  } else {
+    el.textContent = 'Window: Sep 1 ' + startYr + ' \u2013 Mar 31 ' + endYr;
+  }
+}
+
 function siRenderWrestlers() {
   const list  = document.getElementById('si-wrestler-list');
   const empty = document.getElementById('si-empty');
@@ -2295,18 +2376,31 @@ async function importCombined() {
     siLog('Warning: No weight class entered. Seeds will be grouped under "Unknown" weight — enter a weight class before importing if this is for a specific bracket.', 'warn');
   }
 
+  const cutoffDate     = (document.getElementById('si-cutoff-date') || {}).value || '';
+  includeFreestyle     = !!(document.getElementById('si-include-freestyle') || {}).checked;
+
   siLog('Starting combined import for ' + siWrestlers.length + ' wrestler(s)...', 'info');
-  siLog('Season: ' + season + (weight ? ' | Weight: ' + weight : ''), 'info');
+  siLog('Season: ' + season + ' | Mode: ' + selectedMode + (weight ? ' | Weight: ' + weight : '') + (cutoffDate ? ' | Cutoff: ' + cutoffDate : ''), 'info');
   toast('Pulling season data...');
 
   try {
+    const startYr   = parseInt((season || '2025-26').split('-')[0], 10);
+    const endYr     = startYr + 1;
+    const startDate = selectedMode === 'freestyle'
+      ? (endYr + '-04-01')
+      : (startYr + '-09-01');
+
     const body = {
       wrestlers: siWrestlers.map(function(w) {
         return { name: w.name, weight: w.weight || weight, flo_id: w.flo_id || null, usab_id: w.usab_id || null };
       }),
-      season:    season,
+      season:     season,
+      mode:       selectedMode,
+      start_date: startDate,
     };
     if (weight) body.weight = weight;
+    if (cutoffDate) body.end_date = cutoffDate;
+    if (includeFreestyle && selectedMode === 'folkstyle') body.include_freestyle = true;
 
     const res = await fetch(API + '/scrape/combined', {
       method:  'POST',
