@@ -970,6 +970,32 @@ def get_season_range(season_str=None):
     season_end   = datetime(end_year,   3, 31)
     return season_start, season_end
 
+_FREESTYLE_NAME_RE = re.compile(
+    r'freestyle|free style|fs/gr|fs/greco|greco-roman|greco|uww', re.IGNORECASE
+)
+_FREESTYLE_LEVELS = {"senior", "junior", "cadet", "u23", "u20"}
+
+def classify_match_style(event_name, event_date, level):
+    """Return 'folkstyle' or 'freestyle' for a bout.
+
+    Priority 1 — event name keywords
+    Priority 2 — USA Wrestling age-division level field
+    Priority 3 — date-range fallback (Apr–Aug → freestyle)
+    """
+    if event_name and _FREESTYLE_NAME_RE.search(str(event_name)):
+        return "freestyle"
+    if level and str(level).strip().lower() in _FREESTYLE_LEVELS:
+        return "freestyle"
+    if event_date is not None:
+        try:
+            month = event_date.month if hasattr(event_date, "month") else datetime.fromisoformat(str(event_date)[:10]).month
+            if 4 <= month <= 8:
+                return "freestyle"
+        except Exception:
+            pass
+    return "folkstyle"
+
+
 def extract_flo_id(url_or_id):
     url_or_id = url_or_id.strip()
     # Already a bare ID (alphanumeric, no slash)
@@ -1083,12 +1109,13 @@ async def fetch_flo_profile(wrestler_id, season=None):
 
                 if in_season:
                     matches.append({
-                        "opponent": opponent,
-                        "method": method,
-                        "won": won,
+                        "opponent":   opponent,
+                        "method":     method,
+                        "won":        won,
                         "tournament": tournament_name,
-                        "date": match_date.strftime("%b %d, %Y") if match_date else None,
-                        "score": None,
+                        "date":       match_date.strftime("%b %d, %Y") if match_date else None,
+                        "score":      None,
+                        "style":      classify_match_style(tournament_name, match_date, bout.get("level", "")),
                     })
 
     except Exception as e:
@@ -1141,6 +1168,7 @@ def build_seedit_matches(profiles, weight_override=None, field_names=None):
                 "winner":    winner,
                 "method":    method,
                 "date":      m.get("date"),
+                "style":     m.get("style", "folkstyle"),
             })
 
     return seedit_matches
@@ -1710,6 +1738,7 @@ def _parse_usab_matches_html(html, event_name, season_start, season_end,
             "tournament": str(event_name or "USA Bracketing"),
             "date":       match_date.strftime("%b %d, %Y") if match_date else None,
             "score":      score,
+            "style":      classify_match_style(str(event_name or ""), match_date, ""),
         })
 
     print(f"=== USAB _parse_usab_matches_html: event={event_name!r} "
@@ -2528,9 +2557,15 @@ async def scrape_combined(request: Request):
     """
     try:
         body = await request.json()
-        wrestler_entries = body.get("wrestlers", [])
-        weight_override  = body.get("weight", None)
-        season           = body.get("season", None)
+        wrestler_entries   = body.get("wrestlers", [])
+        weight_override    = body.get("weight", None)
+        season             = body.get("season", None)
+        start_date_str     = body.get("start_date", None)
+        end_date_str       = body.get("end_date", None)
+        include_freestyle  = bool(body.get("include_freestyle", False))
+        mode               = body.get("mode", "folkstyle")
+        if mode not in ("folkstyle", "freestyle"):
+            mode = "folkstyle"
 
         if not wrestler_entries:
             return JSONResponse({"error": "No wrestlers provided"}, status_code=400)
@@ -2706,12 +2741,53 @@ async def scrape_combined(request: Request):
             print(f"=== scrape_combined: field_names={field_names} ===")
 
             all_matches = build_seedit_matches(profiles, weight_override)
-            print(f"=== scrape_combined: all_matches={len(all_matches)} ===")
-            for i, m in enumerate(all_matches[:3]):
-                print(f"=== scrape_combined: all_matches[{i}]={m} ===")
-
             h2h_matches = build_seedit_matches(profiles, weight_override, field_names=field_names)
-            print(f"=== scrape_combined: h2h_matches={len(h2h_matches)} ===")
+
+            # ── Date / style filtering ────────────────────────────────────────
+            season_start, season_end = get_season_range(season)
+            if start_date_str:
+                try:
+                    _sd = datetime.strptime(start_date_str[:10], "%Y-%m-%d").date()
+                except Exception:
+                    _sd = season_start.date()
+            else:
+                _sd = season_start.date() if mode == "folkstyle" else datetime(season_end.year, 4, 1).date()
+
+            if end_date_str:
+                try:
+                    _ed = datetime.strptime(end_date_str[:10], "%Y-%m-%d").date()
+                except Exception:
+                    _ed = season_end.date()
+            else:
+                _ed = season_end.date() if mode == "folkstyle" else datetime(season_end.year, 8, 31).date()
+
+            # Extended freestyle window for SOS supplement (Apr 1 prior year)
+            _fs_sd = datetime(season_start.year, 4, 1).date()
+
+            def _match_in_window(m, win_start, win_end):
+                d = _parse_match_date(m.get("date"))
+                if d is None:
+                    return True  # no date → include
+                return win_start <= d <= win_end
+
+            def _filter_all(matches):
+                out = []
+                for m in matches:
+                    style = m.get("style", "folkstyle")
+                    if style == mode and _match_in_window(m, _sd, _ed):
+                        out.append(m)
+                    elif include_freestyle and mode == "folkstyle" and style == "freestyle" and _match_in_window(m, _fs_sd, _ed):
+                        out.append(m)
+                return out
+
+            def _filter_h2h(matches):
+                return [m for m in matches if m.get("style", "folkstyle") == mode and _match_in_window(m, _sd, _ed)]
+
+            all_matches = _filter_all(all_matches)
+            h2h_matches = _filter_h2h(h2h_matches)
+
+            print(f"=== scrape_combined: mode={mode!r} window={_sd}–{_ed} include_freestyle={include_freestyle} ===")
+            print(f"=== scrape_combined: all_matches={len(all_matches)} h2h_matches={len(h2h_matches)} ===")
 
             if not all_matches:
                 return JSONResponse({
